@@ -11,35 +11,6 @@ function getAnthropicClient(): Anthropic {
   return new Anthropic({ apiKey })
 }
 
-async function convertPdfToImage(pdfPath: string): Promise<Buffer | null> {
-  try {
-    // Dynamic import to avoid build issues
-    const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs')
-    const { createCanvas } = await import('canvas')
-
-    const data = new Uint8Array(fs.readFileSync(pdfPath))
-    const pdfDoc = await pdfjsLib.getDocument({ data }).promise
-    const page = await pdfDoc.getPage(1)
-
-    const scale = 2.0
-    const viewport = page.getViewport({ scale })
-
-    const canvas = createCanvas(viewport.width, viewport.height)
-    const context = canvas.getContext('2d')
-
-    await page.render({
-      // @ts-expect-error - canvas context type mismatch but works
-      canvasContext: context,
-      viewport: viewport,
-    }).promise
-
-    return canvas.toBuffer('image/png')
-  } catch (error) {
-    console.error('PDF conversion error:', error)
-    return null
-  }
-}
-
 export interface ReceiptAnalysis {
   vendor: string | null
   amount: number | null
@@ -70,35 +41,27 @@ export async function analyzeReceipt(filePath: string): Promise<ReceiptAnalysis>
   const absolutePath = path.join(process.cwd(), 'data', 'uploads', filePath)
   const ext = path.extname(filePath).toLowerCase()
 
-  let imageData: Buffer
-  let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/png'
-
-  // Handle PDF files by converting to image
+  // PDFs cannot be processed by vision API - mark for manual review
   if (ext === '.pdf') {
-    const pdfImage = await convertPdfToImage(absolutePath)
-    if (!pdfImage) {
-      return {
-        vendor: null,
-        amount: null,
-        currency: 'USD',
-        date: null,
-        category: null,
-        description: null,
-        payment_method: null,
-        raw_text: 'Failed to convert PDF for processing',
-      }
+    return {
+      vendor: null,
+      amount: null,
+      currency: 'USD',
+      date: null,
+      category: null,
+      description: null,
+      payment_method: null,
+      raw_text: 'PDF uploaded - view in admin and enter details manually',
     }
-    imageData = pdfImage
-    mediaType = 'image/png'
-  } else {
-    imageData = fs.readFileSync(absolutePath)
-
-    // Determine media type from extension
-    if (ext === '.png') mediaType = 'image/png'
-    else if (ext === '.gif') mediaType = 'image/gif'
-    else if (ext === '.webp') mediaType = 'image/webp'
-    else mediaType = 'image/jpeg'
   }
+
+  const imageData = fs.readFileSync(absolutePath)
+
+  // Determine media type from extension
+  let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/jpeg'
+  if (ext === '.png') mediaType = 'image/png'
+  else if (ext === '.gif') mediaType = 'image/gif'
+  else if (ext === '.webp') mediaType = 'image/webp'
 
   // Check file size (max ~20MB for base64)
   if (imageData.length > 15 * 1024 * 1024) {
