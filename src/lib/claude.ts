@@ -2,9 +2,14 @@ import Anthropic from '@anthropic-ai/sdk'
 import fs from 'fs'
 import path from 'path'
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-})
+function getAnthropicClient(): Anthropic {
+  // Read API key fresh from env (allows runtime updates)
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) {
+    throw new Error('ANTHROPIC_API_KEY not configured. Go to /admin/settings to set it.')
+  }
+  return new Anthropic({ apiKey })
+}
 
 export interface ReceiptAnalysis {
   vendor: string | null
@@ -34,16 +39,47 @@ const EXPENSE_CATEGORIES = [
 
 export async function analyzeReceipt(filePath: string): Promise<ReceiptAnalysis> {
   const absolutePath = path.join(process.cwd(), 'data', 'uploads', filePath)
+  const ext = path.extname(filePath).toLowerCase()
+
+  // Check for unsupported formats
+  if (ext === '.pdf') {
+    return {
+      vendor: null,
+      amount: null,
+      currency: 'USD',
+      date: null,
+      category: null,
+      description: null,
+      payment_method: null,
+      raw_text: 'PDF files require manual review - AI processing not available for PDFs',
+    }
+  }
+
   const imageData = fs.readFileSync(absolutePath)
+
+  // Check file size (max ~20MB for base64)
+  if (imageData.length > 15 * 1024 * 1024) {
+    return {
+      vendor: null,
+      amount: null,
+      currency: 'USD',
+      date: null,
+      category: null,
+      description: null,
+      payment_method: null,
+      raw_text: 'Image too large for processing - please upload a smaller image',
+    }
+  }
+
   const base64Image = imageData.toString('base64')
 
   // Determine media type from extension
-  const ext = path.extname(filePath).toLowerCase()
   let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/jpeg'
   if (ext === '.png') mediaType = 'image/png'
   else if (ext === '.gif') mediaType = 'image/gif'
   else if (ext === '.webp') mediaType = 'image/webp'
 
+  const anthropic = getAnthropicClient()
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-20250514',
     max_tokens: 1024,

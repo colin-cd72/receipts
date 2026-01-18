@@ -144,7 +144,7 @@ export default function ReceiptUploader() {
               Multiple files supported - select or drag as many as you need
             </p>
             <p className="text-sm text-gray-400 mt-1">
-              Formats: JPG, PNG, GIF, WebP, PDF
+              Best: JPG, PNG, WebP | PDF stored but needs manual review
             </p>
           </>
         )}
