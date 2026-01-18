@@ -78,13 +78,16 @@ export default function ReceiptUploader() {
     [name, email]
   )
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     onDrop,
     accept: {
       'image/*': ['.jpeg', '.jpg', '.png', '.gif', '.webp'],
       'application/pdf': ['.pdf'],
     },
+    multiple: true,
     disabled: isUploading,
+    noClick: false,
+    noDrag: false,
   })
 
   return (
@@ -137,8 +140,11 @@ export default function ReceiptUploader() {
             <p className="text-lg text-gray-600">
               Drag & drop receipts here, or click to select
             </p>
-            <p className="text-sm text-gray-400 mt-2">
-              Supports: JPG, PNG, GIF, WebP, PDF
+            <p className="text-sm text-gray-500 mt-2">
+              Multiple files supported - select or drag as many as you need
+            </p>
+            <p className="text-sm text-gray-400 mt-1">
+              Formats: JPG, PNG, GIF, WebP, PDF
             </p>
           </>
         )}
