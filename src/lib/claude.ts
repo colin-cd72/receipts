@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import fs from 'fs'
 import path from 'path'
+import { pdf } from 'pdf-to-img'
 
 function getAnthropicClient(): Anthropic {
   // Read API key fresh from env (allows runtime updates)
@@ -9,6 +10,21 @@ function getAnthropicClient(): Anthropic {
     throw new Error('ANTHROPIC_API_KEY not configured. Go to /admin/settings to set it.')
   }
   return new Anthropic({ apiKey })
+}
+
+async function convertPdfToImage(pdfPath: string): Promise<Buffer | null> {
+  try {
+    const document = await pdf(pdfPath, { scale: 2.0 })
+
+    // Get the first page as PNG
+    for await (const image of document) {
+      return image as Buffer
+    }
+    return null
+  } catch (error) {
+    console.error('PDF conversion error:', error)
+    return null
+  }
 }
 
 export interface ReceiptAnalysis {
@@ -41,21 +57,35 @@ export async function analyzeReceipt(filePath: string): Promise<ReceiptAnalysis>
   const absolutePath = path.join(process.cwd(), 'data', 'uploads', filePath)
   const ext = path.extname(filePath).toLowerCase()
 
-  // Check for unsupported formats
-  if (ext === '.pdf') {
-    return {
-      vendor: null,
-      amount: null,
-      currency: 'USD',
-      date: null,
-      category: null,
-      description: null,
-      payment_method: null,
-      raw_text: 'PDF files require manual review - AI processing not available for PDFs',
-    }
-  }
+  let imageData: Buffer
+  let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/png'
 
-  const imageData = fs.readFileSync(absolutePath)
+  // Handle PDF files by converting to image
+  if (ext === '.pdf') {
+    const pdfImage = await convertPdfToImage(absolutePath)
+    if (!pdfImage) {
+      return {
+        vendor: null,
+        amount: null,
+        currency: 'USD',
+        date: null,
+        category: null,
+        description: null,
+        payment_method: null,
+        raw_text: 'Failed to convert PDF for processing',
+      }
+    }
+    imageData = pdfImage
+    mediaType = 'image/png'
+  } else {
+    imageData = fs.readFileSync(absolutePath)
+
+    // Determine media type from extension
+    if (ext === '.png') mediaType = 'image/png'
+    else if (ext === '.gif') mediaType = 'image/gif'
+    else if (ext === '.webp') mediaType = 'image/webp'
+    else mediaType = 'image/jpeg'
+  }
 
   // Check file size (max ~20MB for base64)
   if (imageData.length > 15 * 1024 * 1024) {
@@ -72,12 +102,6 @@ export async function analyzeReceipt(filePath: string): Promise<ReceiptAnalysis>
   }
 
   const base64Image = imageData.toString('base64')
-
-  // Determine media type from extension
-  let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/jpeg'
-  if (ext === '.png') mediaType = 'image/png'
-  else if (ext === '.gif') mediaType = 'image/gif'
-  else if (ext === '.webp') mediaType = 'image/webp'
 
   const anthropic = getAnthropicClient()
   const response = await anthropic.messages.create({
