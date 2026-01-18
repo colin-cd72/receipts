@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Settings, Key, CheckCircle, AlertCircle, Loader2, ArrowLeft } from 'lucide-react'
+import { Settings, Key, CheckCircle, AlertCircle, Loader2, ArrowLeft, Mail } from 'lucide-react'
 import Link from 'next/link'
 
 export default function SettingsPage() {
@@ -11,8 +11,11 @@ export default function SettingsPage() {
 
   const [apiKey, setApiKey] = useState('')
   const [adminPassword, setAdminPassword] = useState('')
+  const [resendApiKey, setResendApiKey] = useState('')
+  const [notifyEmail, setNotifyEmail] = useState('')
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [testingEmail, setTestingEmail] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   useEffect(() => {
@@ -48,6 +51,8 @@ export default function SettingsPage() {
       const res = await fetch('/api/admin/settings')
       const data = await res.json()
       setApiKey(data.apiKey || '')
+      setResendApiKey(data.resendApiKey || '')
+      setNotifyEmail(data.notifyEmail || '')
       setAdminPassword('')
     } catch (error) {
       console.error('Failed to load settings:', error)
@@ -67,6 +72,8 @@ export default function SettingsPage() {
         body: JSON.stringify({
           apiKey: apiKey.trim(),
           adminPassword: adminPassword.trim() || undefined,
+          resendApiKey: resendApiKey.trim() || undefined,
+          notifyEmail: notifyEmail.trim() || undefined,
         }),
       })
 
@@ -83,6 +90,34 @@ export default function SettingsPage() {
     }
 
     setSaving(false)
+  }
+
+  const testEmail = async () => {
+    setTestingEmail(true)
+    setMessage(null)
+
+    try {
+      const res = await fetch('/api/admin/settings/test-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resendApiKey: resendApiKey.trim(),
+          notifyEmail: notifyEmail.trim(),
+        }),
+      })
+
+      const data = await res.json()
+
+      if (res.ok) {
+        setMessage({ type: 'success', text: 'Test email sent successfully!' })
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Failed to send test email' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to send test email' })
+    }
+
+    setTestingEmail(false)
   }
 
   const testApiKey = async () => {
@@ -212,6 +247,65 @@ export default function SettingsPage() {
                 placeholder="New admin password"
                 className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
               />
+            </div>
+
+            {/* Email Notifications Section */}
+            <div className="bg-white rounded-xl border p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Mail className="w-5 h-5 text-gray-600" />
+                <h2 className="text-lg font-semibold">Email Notifications</h2>
+              </div>
+              <p className="text-sm text-gray-500 mb-4">
+                Get notified when receipts are processed. Uses{' '}
+                <a
+                  href="https://resend.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:underline"
+                >
+                  Resend
+                </a>{' '}
+                for email delivery (free tier: 100 emails/day).
+              </p>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Resend API Key
+                  </label>
+                  <input
+                    type="password"
+                    value={resendApiKey}
+                    onChange={(e) => setResendApiKey(e.target.value)}
+                    placeholder="re_..."
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-mono text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Send Notifications To
+                  </label>
+                  <input
+                    type="email"
+                    value={notifyEmail}
+                    onChange={(e) => setNotifyEmail(e.target.value)}
+                    placeholder="colin@example.com"
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={testEmail}
+                  disabled={testingEmail || !resendApiKey.trim() || !notifyEmail.trim()}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition disabled:opacity-50"
+                >
+                  {testingEmail ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Mail className="w-4 h-4" />
+                  )}
+                  Send Test Email
+                </button>
+              </div>
             </div>
 
             {/* Message */}

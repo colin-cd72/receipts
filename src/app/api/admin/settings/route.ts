@@ -50,6 +50,8 @@ export async function GET() {
       apiKey: env.ANTHROPIC_API_KEY || '',
       maskedKey,
       hasApiKey: !!env.ANTHROPIC_API_KEY,
+      resendApiKey: env.RESEND_API_KEY || '',
+      notifyEmail: env.NOTIFY_EMAIL || '',
     })
   } catch (error) {
     console.error('Error reading settings:', error)
@@ -59,19 +61,38 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { apiKey, adminPassword } = await request.json()
+    const { apiKey, adminPassword, resendApiKey, notifyEmail } = await request.json()
 
     const env = parseEnvFile()
 
     if (apiKey !== undefined && apiKey.trim()) {
       env.ANTHROPIC_API_KEY = apiKey.trim()
-      // Also update the process env for immediate use
       process.env.ANTHROPIC_API_KEY = apiKey.trim()
     }
 
     if (adminPassword && adminPassword.trim()) {
       env.ADMIN_PASSWORD = adminPassword.trim()
       process.env.ADMIN_PASSWORD = adminPassword.trim()
+    }
+
+    if (resendApiKey !== undefined) {
+      if (resendApiKey.trim()) {
+        env.RESEND_API_KEY = resendApiKey.trim()
+        process.env.RESEND_API_KEY = resendApiKey.trim()
+      } else {
+        delete env.RESEND_API_KEY
+        delete process.env.RESEND_API_KEY
+      }
+    }
+
+    if (notifyEmail !== undefined) {
+      if (notifyEmail.trim()) {
+        env.NOTIFY_EMAIL = notifyEmail.trim()
+        process.env.NOTIFY_EMAIL = notifyEmail.trim()
+      } else {
+        delete env.NOTIFY_EMAIL
+        delete process.env.NOTIFY_EMAIL
+      }
     }
 
     writeEnvFile(env)

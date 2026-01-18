@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { writeFile } from 'fs/promises'
 import path from 'path'
-import { insertReceipt, updateReceipt, getAllReceipts } from '@/lib/db'
+import { insertReceipt, updateReceipt, getAllReceipts, getReceipt } from '@/lib/db'
 import { analyzeReceipt } from '@/lib/claude'
+import { sendReceiptNotification } from '@/lib/email'
 import { randomUUID } from 'crypto'
 
 export async function POST(request: NextRequest) {
@@ -73,6 +74,21 @@ async function processReceiptAsync(receiptId: number, filename: string) {
       status: 'processed',
       processed_at: new Date().toISOString(),
     })
+
+    // Send email notification
+    const receipt = getReceipt(receiptId)
+    if (receipt) {
+      await sendReceiptNotification({
+        uploaderName: receipt.uploader_name,
+        uploaderEmail: receipt.uploader_email,
+        vendor: analysis.vendor,
+        amount: analysis.amount,
+        currency: analysis.currency || 'USD',
+        date: analysis.date,
+        category: analysis.category,
+        originalFilename: receipt.original_filename,
+      })
+    }
   } catch (error) {
     console.error('Processing error for receipt', receiptId, error)
     updateReceipt(receiptId, {

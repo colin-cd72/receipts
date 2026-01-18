@@ -334,45 +334,74 @@ export default function AdminPage() {
                     {expandedId === receipt.id && (
                       <tr key={`${receipt.id}-details`} className="bg-gray-50">
                         <td colSpan={7} className="px-4 py-4">
-                          <div className="grid grid-cols-2 gap-4 text-sm">
-                            <div>
-                              <p className="text-gray-500">Original Filename</p>
-                              <p className="font-medium">{receipt.original_filename}</p>
+                          <div className="flex gap-6">
+                            {/* Receipt Image Preview */}
+                            <div className="flex-shrink-0">
+                              <p className="text-gray-500 text-sm mb-2">Receipt Image</p>
+                              <a
+                                href={`/api/receipts/${receipt.id}/image`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block"
+                              >
+                                {receipt.original_filename.toLowerCase().endsWith('.pdf') ? (
+                                  <div className="w-48 h-64 bg-gray-100 border rounded-lg flex items-center justify-center text-gray-400">
+                                    <div className="text-center">
+                                      <FileImage className="w-12 h-12 mx-auto mb-2" />
+                                      <p className="text-sm">PDF Document</p>
+                                      <p className="text-xs mt-1">Click to view</p>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <img
+                                    src={`/api/receipts/${receipt.id}/image`}
+                                    alt={receipt.original_filename}
+                                    className="max-w-48 max-h-64 object-contain border rounded-lg bg-white cursor-pointer hover:opacity-90 transition"
+                                  />
+                                )}
+                              </a>
                             </div>
-                            <div>
-                              <p className="text-gray-500">Email</p>
-                              <p className="font-medium">{receipt.uploader_email || '-'}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-500">Description</p>
-                              <p className="font-medium">{receipt.description || '-'}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-500">Payment Method</p>
-                              <p className="font-medium">{receipt.payment_method || '-'}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-500">Upload Date</p>
-                              <p className="font-medium">
-                                {new Date(receipt.created_at).toLocaleString()}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-gray-500">Processed At</p>
-                              <p className="font-medium">
-                                {receipt.processed_at
-                                  ? new Date(receipt.processed_at).toLocaleString()
-                                  : '-'}
-                              </p>
-                            </div>
-                            {receipt.raw_text && (
-                              <div className="col-span-2">
-                                <p className="text-gray-500">Raw Text</p>
-                                <pre className="mt-1 p-2 bg-white border rounded text-xs overflow-auto max-h-32">
-                                  {receipt.raw_text}
-                                </pre>
+                            {/* Receipt Details */}
+                            <div className="flex-1 grid grid-cols-2 gap-4 text-sm">
+                              <div>
+                                <p className="text-gray-500">Original Filename</p>
+                                <p className="font-medium">{receipt.original_filename}</p>
                               </div>
-                            )}
+                              <div>
+                                <p className="text-gray-500">Email</p>
+                                <p className="font-medium">{receipt.uploader_email || '-'}</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-500">Description</p>
+                                <p className="font-medium">{receipt.description || '-'}</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-500">Payment Method</p>
+                                <p className="font-medium">{receipt.payment_method || '-'}</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-500">Upload Date</p>
+                                <p className="font-medium">
+                                  {new Date(receipt.created_at).toLocaleString()}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-gray-500">Processed At</p>
+                                <p className="font-medium">
+                                  {receipt.processed_at
+                                    ? new Date(receipt.processed_at).toLocaleString()
+                                    : '-'}
+                                </p>
+                              </div>
+                              {receipt.raw_text && (
+                                <div className="col-span-2">
+                                  <p className="text-gray-500">Raw Text</p>
+                                  <pre className="mt-1 p-2 bg-white border rounded text-xs overflow-auto max-h-32">
+                                    {receipt.raw_text}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </td>
                       </tr>
