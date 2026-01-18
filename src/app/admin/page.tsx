@@ -13,6 +13,7 @@ import {
   Clock,
   Loader2,
   Settings,
+  RotateCcw,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -93,6 +94,50 @@ export default function AdminPage() {
     }
   }
 
+  const [reprocessing, setReprocessing] = useState(false)
+
+  const handleReprocessAll = async () => {
+    const pendingCount = receipts.filter(
+      (r) => r.status === 'pending' || r.status === 'error' || r.status === 'processing'
+    ).length
+
+    if (pendingCount === 0) {
+      alert('No receipts to reprocess')
+      return
+    }
+
+    if (!confirm(`Reprocess ${pendingCount} pending/error receipts?`)) return
+
+    setReprocessing(true)
+    try {
+      await fetch('/api/receipts/reprocess', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ all: true }),
+      })
+      alert(`Reprocessing ${pendingCount} receipts. Refresh in a moment to see results.`)
+    } catch (error) {
+      console.error('Failed to reprocess:', error)
+      alert('Failed to start reprocessing')
+    }
+    setReprocessing(false)
+  }
+
+  const handleReprocessOne = async (id: number) => {
+    try {
+      setReceipts((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, status: 'processing' } : r))
+      )
+      await fetch('/api/receipts/reprocess', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      })
+    } catch (error) {
+      console.error('Failed to reprocess:', error)
+    }
+  }
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'processed':
@@ -151,6 +196,18 @@ export default function AdminPage() {
             >
               <RefreshCw className="w-4 h-4" />
               Refresh
+            </button>
+            <button
+              onClick={handleReprocessAll}
+              disabled={reprocessing}
+              className="flex items-center gap-2 px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition disabled:opacity-50"
+            >
+              {reprocessing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RotateCcw className="w-4 h-4" />
+              )}
+              Reprocess All
             </button>
             <a
               href="/api/export?format=csv"
@@ -245,6 +302,18 @@ export default function AdminPage() {
                       <td className="px-4 py-3 text-sm">{receipt.uploader_name}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
+                          {(receipt.status === 'error' || receipt.status === 'pending') && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleReprocessOne(receipt.id)
+                              }}
+                              className="p-1 text-yellow-600 hover:bg-yellow-50 rounded"
+                              title="Reprocess"
+                            >
+                              <RotateCcw className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
