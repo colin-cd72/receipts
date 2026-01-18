@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(cd /Users/deford/Business/TMRW\\\\ Sports/DATA/receipts && npx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias \"@/*\" --use-npm:*)"
+    ]
+  }
+}

@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Next.js build
+.next/
+out/
+
+# Environment
+.env
+.env.local
+
+# Database
+*.db
+
+# Uploads
+data/uploads/*
+!data/uploads/.gitkeep
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
