@@ -8,10 +8,14 @@ export async function POST(request: NextRequest) {
     const { id, all } = await request.json()
 
     if (all) {
-      // Reprocess all pending/error receipts
+      // Reprocess all pending/error receipts AND processed ones with no data
       const receipts = getAllReceipts()
       const toReprocess = receipts.filter(
-        (r) => r.status === 'pending' || r.status === 'error' || r.status === 'processing'
+        (r) =>
+          r.status === 'pending' ||
+          r.status === 'error' ||
+          r.status === 'processing' ||
+          (r.status === 'processed' && !r.vendor && !r.amount)
       )
 
       // Process in background

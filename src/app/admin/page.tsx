@@ -98,7 +98,11 @@ export default function AdminPage() {
 
   const handleReprocessAll = async () => {
     const pendingCount = receipts.filter(
-      (r) => r.status === 'pending' || r.status === 'error' || r.status === 'processing'
+      (r) =>
+        r.status === 'pending' ||
+        r.status === 'error' ||
+        r.status === 'processing' ||
+        (r.status === 'processed' && !r.vendor && !r.amount)
     ).length
 
     if (pendingCount === 0) {
@@ -106,7 +110,7 @@ export default function AdminPage() {
       return
     }
 
-    if (!confirm(`Reprocess ${pendingCount} pending/error receipts?`)) return
+    if (!confirm(`Reprocess ${pendingCount} receipts?`)) return
 
     setReprocessing(true)
     try {
@@ -302,7 +306,9 @@ export default function AdminPage() {
                       <td className="px-4 py-3 text-sm">{receipt.uploader_name}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          {(receipt.status === 'error' || receipt.status === 'pending') && (
+                          {(receipt.status === 'error' ||
+                            receipt.status === 'pending' ||
+                            (receipt.status === 'processed' && !receipt.vendor && !receipt.amount)) && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation()
