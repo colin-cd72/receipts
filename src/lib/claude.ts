@@ -1,7 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import fs from 'fs'
 import path from 'path'
-import { pdf } from 'pdf-to-img'
 
 function getAnthropicClient(): Anthropic {
   // Read API key fresh from env (allows runtime updates)
@@ -14,13 +13,27 @@ function getAnthropicClient(): Anthropic {
 
 async function convertPdfToImage(pdfPath: string): Promise<Buffer | null> {
   try {
-    const document = await pdf(pdfPath, { scale: 2.0 })
+    // Dynamic import to avoid build issues
+    const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs')
+    const { createCanvas } = await import('canvas')
 
-    // Get the first page as PNG
-    for await (const image of document) {
-      return image as Buffer
-    }
-    return null
+    const data = new Uint8Array(fs.readFileSync(pdfPath))
+    const pdfDoc = await pdfjsLib.getDocument({ data }).promise
+    const page = await pdfDoc.getPage(1)
+
+    const scale = 2.0
+    const viewport = page.getViewport({ scale })
+
+    const canvas = createCanvas(viewport.width, viewport.height)
+    const context = canvas.getContext('2d')
+
+    await page.render({
+      // @ts-expect-error - canvas context type mismatch but works
+      canvasContext: context,
+      viewport: viewport,
+    }).promise
+
+    return canvas.toBuffer('image/png')
   } catch (error) {
     console.error('PDF conversion error:', error)
     return null
