@@ -12,7 +12,9 @@ import {
   CheckCircle,
   Clock,
   Loader2,
+  Settings,
 } from 'lucide-react'
+import Link from 'next/link'
 
 interface Receipt {
   id: number
@@ -136,6 +138,13 @@ export default function AdminPage() {
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-2xl font-bold text-gray-900">Receipt Admin</h1>
           <div className="flex gap-3">
+            <Link
+              href="/admin/settings"
+              className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg hover:bg-gray-50 transition"
+            >
+              <Settings className="w-4 h-4" />
+              Settings
+            </Link>
             <button
               onClick={fetchReceipts}
               className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg hover:bg-gray-50 transition"
