@@ -15,6 +15,10 @@ import {
   Settings,
   RotateCcw,
   X,
+  Search,
+  Grid,
+  List,
+  Archive,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -43,6 +47,8 @@ export default function AdminPage() {
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [authenticated, setAuthenticated] = useState(false)
   const [password, setPassword] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [viewMode, setViewMode] = useState<'table' | 'gallery'>('table')
 
   useEffect(() => {
     // Check if already authenticated via session
@@ -214,6 +220,29 @@ export default function AdminPage() {
     }
   }
 
+  // Filter receipts based on search query
+  const filteredReceipts = receipts.filter((r) => {
+    if (!searchQuery.trim()) return true
+    const query = searchQuery.toLowerCase()
+    return (
+      (r.vendor?.toLowerCase().includes(query)) ||
+      (r.amount?.toString().includes(query)) ||
+      (r.date?.includes(query)) ||
+      (r.category?.toLowerCase().includes(query)) ||
+      (r.description?.toLowerCase().includes(query)) ||
+      (r.uploader_name?.toLowerCase().includes(query))
+    )
+  })
+
+  // Generate smart filename for a receipt
+  const getSmartFilename = (receipt: Receipt) => {
+    const date = receipt.date || 'unknown-date'
+    const vendor = (receipt.vendor || 'unknown').replace(/[^a-zA-Z0-9]/g, '-').substring(0, 30)
+    const amount = receipt.amount ? receipt.amount.toFixed(2) : '0.00'
+    const ext = receipt.original_filename.split('.').pop() || 'pdf'
+    return `${date}_${vendor}_$${amount}.${ext}`
+  }
+
   if (!authenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -286,6 +315,43 @@ export default function AdminPage() {
               <Download className="w-4 h-4" />
               Workday Export
             </a>
+            <a
+              href="/api/export/zip"
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+            >
+              <Archive className="w-4 h-4" />
+              Download ZIP
+            </a>
+          </div>
+        </div>
+
+        {/* Search and View Toggle */}
+        <div className="flex items-center gap-4 mb-6">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search by vendor, amount, date, category..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+            />
+          </div>
+          <div className="flex bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setViewMode('table')}
+              className={`p-2 rounded ${viewMode === 'table' ? 'bg-white shadow' : 'hover:bg-gray-200'}`}
+              title="Table View"
+            >
+              <List className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => setViewMode('gallery')}
+              className={`p-2 rounded ${viewMode === 'gallery' ? 'bg-white shadow' : 'hover:bg-gray-200'}`}
+              title="Gallery View"
+            >
+              <Grid className="w-5 h-5" />
+            </button>
           </div>
         </div>
 
@@ -384,7 +450,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Receipts Table */}
+        {/* Receipts */}
         {loading ? (
           <div className="text-center py-12">
             <Loader2 className="w-8 h-8 animate-spin mx-auto text-gray-400" />
@@ -394,7 +460,77 @@ export default function AdminPage() {
             <FileImage className="w-12 h-12 mx-auto text-gray-300 mb-4" />
             <p className="text-gray-500">No receipts uploaded yet</p>
           </div>
+        ) : filteredReceipts.length === 0 ? (
+          <div className="text-center py-12 bg-white rounded-xl border">
+            <Search className="w-12 h-12 mx-auto text-gray-300 mb-4" />
+            <p className="text-gray-500">No receipts match your search</p>
+          </div>
+        ) : viewMode === 'gallery' ? (
+          /* Gallery View */
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {filteredReceipts.map((receipt) => (
+              <div
+                key={receipt.id}
+                className="bg-white rounded-xl border overflow-hidden hover:shadow-lg transition"
+              >
+                {/* Thumbnail */}
+                <a
+                  href={`/api/receipts/${receipt.id}/image`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block aspect-[3/4] bg-gray-100 relative"
+                >
+                  {receipt.original_filename.toLowerCase().endsWith('.pdf') ? (
+                    <div className="absolute inset-0 flex items-center justify-center text-gray-400">
+                      <div className="text-center">
+                        <FileImage className="w-12 h-12 mx-auto mb-2" />
+                        <p className="text-xs">PDF</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <img
+                      src={`/api/receipts/${receipt.id}/image`}
+                      alt={receipt.original_filename}
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                  <div className="absolute top-2 right-2">
+                    {getStatusIcon(receipt.status)}
+                  </div>
+                </a>
+
+                {/* Info */}
+                <div className="p-3">
+                  <p className="font-medium text-sm truncate">{receipt.vendor || 'Unknown Vendor'}</p>
+                  <p className="text-lg font-bold text-green-600">
+                    {receipt.amount ? `$${receipt.amount.toFixed(2)}` : '-'}
+                  </p>
+                  <p className="text-xs text-gray-500">{receipt.date || 'No date'}</p>
+                  <p className="text-xs text-gray-400 truncate">{receipt.category || 'Uncategorized'}</p>
+
+                  {/* Actions */}
+                  <div className="flex gap-2 mt-3">
+                    <a
+                      href={`/api/receipts/${receipt.id}/download?filename=${encodeURIComponent(getSmartFilename(receipt))}`}
+                      className="flex-1 flex items-center justify-center gap-1 px-2 py-1 bg-blue-50 text-blue-600 rounded text-xs hover:bg-blue-100"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Download className="w-3 h-3" />
+                      Download
+                    </a>
+                    <button
+                      onClick={() => handleDelete(receipt.id)}
+                      className="p-1 text-red-500 hover:bg-red-50 rounded"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
+          /* Table View */
           <div className="bg-white rounded-xl border overflow-hidden">
             <table className="w-full">
               <thead className="bg-gray-50 border-b">
@@ -409,7 +545,7 @@ export default function AdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {receipts.map((receipt) => (
+                {filteredReceipts.map((receipt) => (
                   <>
                     <tr
                       key={receipt.id}
@@ -431,6 +567,14 @@ export default function AdminPage() {
                       <td className="px-4 py-3 text-sm">{receipt.uploader_name}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
+                          <a
+                            href={`/api/receipts/${receipt.id}/download?filename=${encodeURIComponent(getSmartFilename(receipt))}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                            title={`Download as ${getSmartFilename(receipt)}`}
+                          >
+                            <Download className="w-4 h-4" />
+                          </a>
                           {(receipt.status === 'error' ||
                             receipt.status === 'pending' ||
                             (receipt.status === 'processed' && !receipt.vendor && !receipt.amount)) && (
