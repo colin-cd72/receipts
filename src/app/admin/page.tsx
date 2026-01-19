@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   Download,
   Trash2,
@@ -14,6 +14,7 @@ import {
   Loader2,
   Settings,
   RotateCcw,
+  X,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -95,22 +96,80 @@ export default function AdminPage() {
   }
 
   const [reprocessing, setReprocessing] = useState(false)
+  const [processingProgress, setProcessingProgress] = useState<{
+    total: number
+    processed: number
+    processing: number
+    errors: number
+    active: boolean
+  } | null>(null)
+
+  // Poll for progress updates when reprocessing
+  const pollProgress = useCallback(async () => {
+    try {
+      const res = await fetch('/api/receipts')
+      const data = await res.json()
+      const allReceipts = data.receipts || []
+      setReceipts(allReceipts)
+
+      if (processingProgress?.active) {
+        const processing = allReceipts.filter((r: Receipt) => r.status === 'processing').length
+        const processed = allReceipts.filter(
+          (r: Receipt) => r.status === 'processed' && (r.vendor || r.amount)
+        ).length
+        const errors = allReceipts.filter((r: Receipt) => r.status === 'error').length
+
+        setProcessingProgress((prev) => {
+          if (!prev) return null
+          const newProgress = {
+            ...prev,
+            processing,
+            processed,
+            errors,
+          }
+          // Stop polling when all done
+          if (processing === 0 && prev.processing > 0) {
+            return { ...newProgress, active: false }
+          }
+          return newProgress
+        })
+      }
+    } catch (error) {
+      console.error('Failed to poll progress:', error)
+    }
+  }, [processingProgress?.active])
+
+  useEffect(() => {
+    if (!processingProgress?.active) return
+
+    const interval = setInterval(pollProgress, 2000)
+    return () => clearInterval(interval)
+  }, [processingProgress?.active, pollProgress])
 
   const handleReprocessAll = async () => {
-    const pendingCount = receipts.filter(
+    const toProcess = receipts.filter(
       (r) =>
         r.status === 'pending' ||
         r.status === 'error' ||
         r.status === 'processing' ||
         (r.status === 'processed' && !r.vendor && !r.amount)
-    ).length
+    )
 
-    if (pendingCount === 0) {
+    if (toProcess.length === 0) {
       alert('No receipts to reprocess')
       return
     }
 
-    if (!confirm(`Reprocess ${pendingCount} receipts?`)) return
+    if (!confirm(`Reprocess ${toProcess.length} receipts?`)) return
+
+    // Initialize progress tracking
+    setProcessingProgress({
+      total: toProcess.length,
+      processed: 0,
+      processing: toProcess.length,
+      errors: 0,
+      active: true,
+    })
 
     setReprocessing(true)
     try {
@@ -119,10 +178,10 @@ export default function AdminPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ all: true }),
       })
-      alert(`Reprocessing ${pendingCount} receipts. Refresh in a moment to see results.`)
     } catch (error) {
       console.error('Failed to reprocess:', error)
       alert('Failed to start reprocessing')
+      setProcessingProgress(null)
     }
     setReprocessing(false)
   }
@@ -258,6 +317,72 @@ export default function AdminPage() {
             </p>
           </div>
         </div>
+
+        {/* Processing Progress Bar */}
+        {processingProgress && (
+          <div className="bg-white p-4 rounded-xl border mb-8">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                {processingProgress.active ? (
+                  <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
+                ) : (
+                  <CheckCircle className="w-5 h-5 text-green-500" />
+                )}
+                <span className="font-medium">
+                  {processingProgress.active ? 'Processing Receipts...' : 'Processing Complete'}
+                </span>
+              </div>
+              <button
+                onClick={() => setProcessingProgress(null)}
+                className="p-1 hover:bg-gray-100 rounded"
+              >
+                <X className="w-4 h-4 text-gray-400" />
+              </button>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="w-full bg-gray-200 rounded-full h-3 mb-3">
+              <div
+                className="h-3 rounded-full transition-all duration-500 bg-gradient-to-r from-blue-500 to-green-500"
+                style={{
+                  width: `${Math.round(
+                    ((processingProgress.processed + processingProgress.errors) /
+                      processingProgress.total) *
+                      100
+                  )}%`,
+                }}
+              />
+            </div>
+
+            {/* Stats */}
+            <div className="flex gap-6 text-sm">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-green-500" />
+                <span>
+                  Processed: <strong>{processingProgress.processed}</strong>
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse" />
+                <span>
+                  In Progress: <strong>{processingProgress.processing}</strong>
+                </span>
+              </div>
+              {processingProgress.errors > 0 && (
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-red-500" />
+                  <span>
+                    Errors: <strong>{processingProgress.errors}</strong>
+                  </span>
+                </div>
+              )}
+              <div className="ml-auto text-gray-500">
+                {processingProgress.processed + processingProgress.errors} of{' '}
+                {processingProgress.total}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Receipts Table */}
         {loading ? (
