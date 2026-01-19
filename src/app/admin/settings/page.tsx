@@ -11,7 +11,11 @@ export default function SettingsPage() {
 
   const [apiKey, setApiKey] = useState('')
   const [adminPassword, setAdminPassword] = useState('')
-  const [resendApiKey, setResendApiKey] = useState('')
+  const [smtpHost, setSmtpHost] = useState('')
+  const [smtpPort, setSmtpPort] = useState('587')
+  const [smtpUser, setSmtpUser] = useState('')
+  const [smtpPass, setSmtpPass] = useState('')
+  const [smtpFrom, setSmtpFrom] = useState('')
   const [notifyEmail, setNotifyEmail] = useState('')
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -51,7 +55,11 @@ export default function SettingsPage() {
       const res = await fetch('/api/admin/settings')
       const data = await res.json()
       setApiKey(data.apiKey || '')
-      setResendApiKey(data.resendApiKey || '')
+      setSmtpHost(data.smtpHost || '')
+      setSmtpPort(data.smtpPort || '587')
+      setSmtpUser(data.smtpUser || '')
+      setSmtpPass(data.smtpPass || '')
+      setSmtpFrom(data.smtpFrom || '')
       setNotifyEmail(data.notifyEmail || '')
       setAdminPassword('')
     } catch (error) {
@@ -72,7 +80,11 @@ export default function SettingsPage() {
         body: JSON.stringify({
           apiKey: apiKey.trim(),
           adminPassword: adminPassword.trim() || undefined,
-          resendApiKey: resendApiKey.trim() || undefined,
+          smtpHost: smtpHost.trim() || undefined,
+          smtpPort: smtpPort.trim() || undefined,
+          smtpUser: smtpUser.trim() || undefined,
+          smtpPass: smtpPass.trim() || undefined,
+          smtpFrom: smtpFrom.trim() || undefined,
           notifyEmail: notifyEmail.trim() || undefined,
         }),
       })
@@ -101,7 +113,11 @@ export default function SettingsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          resendApiKey: resendApiKey.trim(),
+          smtpHost: smtpHost.trim(),
+          smtpPort: smtpPort.trim(),
+          smtpUser: smtpUser.trim(),
+          smtpPass: smtpPass.trim(),
+          smtpFrom: smtpFrom.trim(),
           notifyEmail: notifyEmail.trim(),
         }),
       })
@@ -253,31 +269,74 @@ export default function SettingsPage() {
             <div className="bg-white rounded-xl border p-6">
               <div className="flex items-center gap-2 mb-4">
                 <Mail className="w-5 h-5 text-gray-600" />
-                <h2 className="text-lg font-semibold">Email Notifications</h2>
+                <h2 className="text-lg font-semibold">Email Notifications (SMTP)</h2>
               </div>
               <p className="text-sm text-gray-500 mb-4">
-                Get notified when receipts are processed. Uses{' '}
-                <a
-                  href="https://resend.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline"
-                >
-                  Resend
-                </a>{' '}
-                for email delivery (free tier: 100 emails/day).
+                Get notified when receipts are processed. Configure your SMTP server settings below.
               </p>
               <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      SMTP Host
+                    </label>
+                    <input
+                      type="text"
+                      value={smtpHost}
+                      onChange={(e) => setSmtpHost(e.target.value)}
+                      placeholder="smtp.gmail.com"
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      SMTP Port
+                    </label>
+                    <input
+                      type="text"
+                      value={smtpPort}
+                      onChange={(e) => setSmtpPort(e.target.value)}
+                      placeholder="587"
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      SMTP Username
+                    </label>
+                    <input
+                      type="text"
+                      value={smtpUser}
+                      onChange={(e) => setSmtpUser(e.target.value)}
+                      placeholder="user@gmail.com"
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      SMTP Password
+                    </label>
+                    <input
+                      type="password"
+                      value={smtpPass}
+                      onChange={(e) => setSmtpPass(e.target.value)}
+                      placeholder="App password or SMTP password"
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                    />
+                  </div>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Resend API Key
+                    From Address
                   </label>
                   <input
-                    type="password"
-                    value={resendApiKey}
-                    onChange={(e) => setResendApiKey(e.target.value)}
-                    placeholder="re_..."
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-mono text-sm"
+                    type="text"
+                    value={smtpFrom}
+                    onChange={(e) => setSmtpFrom(e.target.value)}
+                    placeholder="Receipts <receipts@yourdomain.com>"
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                   />
                 </div>
                 <div>
@@ -295,7 +354,7 @@ export default function SettingsPage() {
                 <button
                   type="button"
                   onClick={testEmail}
-                  disabled={testingEmail || !resendApiKey.trim() || !notifyEmail.trim()}
+                  disabled={testingEmail || !smtpHost.trim() || !smtpUser.trim() || !smtpPass.trim() || !smtpFrom.trim() || !notifyEmail.trim()}
                   className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition disabled:opacity-50"
                 >
                   {testingEmail ? (

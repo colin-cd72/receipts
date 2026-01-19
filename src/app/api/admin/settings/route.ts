@@ -50,7 +50,11 @@ export async function GET() {
       apiKey: env.ANTHROPIC_API_KEY || '',
       maskedKey,
       hasApiKey: !!env.ANTHROPIC_API_KEY,
-      resendApiKey: env.RESEND_API_KEY || '',
+      smtpHost: env.SMTP_HOST || '',
+      smtpPort: env.SMTP_PORT || '587',
+      smtpUser: env.SMTP_USER || '',
+      smtpPass: env.SMTP_PASS || '',
+      smtpFrom: env.SMTP_FROM || '',
       notifyEmail: env.NOTIFY_EMAIL || '',
     })
   } catch (error) {
@@ -61,7 +65,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { apiKey, adminPassword, resendApiKey, notifyEmail } = await request.json()
+    const { apiKey, adminPassword, smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom, notifyEmail } = await request.json()
 
     const env = parseEnvFile()
 
@@ -75,23 +79,25 @@ export async function POST(request: NextRequest) {
       process.env.ADMIN_PASSWORD = adminPassword.trim()
     }
 
-    if (resendApiKey !== undefined) {
-      if (resendApiKey.trim()) {
-        env.RESEND_API_KEY = resendApiKey.trim()
-        process.env.RESEND_API_KEY = resendApiKey.trim()
-      } else {
-        delete env.RESEND_API_KEY
-        delete process.env.RESEND_API_KEY
-      }
-    }
+    // SMTP settings
+    const smtpFields = [
+      { key: 'SMTP_HOST', value: smtpHost },
+      { key: 'SMTP_PORT', value: smtpPort },
+      { key: 'SMTP_USER', value: smtpUser },
+      { key: 'SMTP_PASS', value: smtpPass },
+      { key: 'SMTP_FROM', value: smtpFrom },
+      { key: 'NOTIFY_EMAIL', value: notifyEmail },
+    ]
 
-    if (notifyEmail !== undefined) {
-      if (notifyEmail.trim()) {
-        env.NOTIFY_EMAIL = notifyEmail.trim()
-        process.env.NOTIFY_EMAIL = notifyEmail.trim()
-      } else {
-        delete env.NOTIFY_EMAIL
-        delete process.env.NOTIFY_EMAIL
+    for (const { key, value } of smtpFields) {
+      if (value !== undefined) {
+        if (value.trim()) {
+          env[key] = value.trim()
+          process.env[key] = value.trim()
+        } else {
+          delete env[key]
+          delete process.env[key]
+        }
       }
     }
 
