@@ -41,30 +41,10 @@ export async function analyzeReceipt(filePath: string): Promise<ReceiptAnalysis>
   const absolutePath = path.join(process.cwd(), 'data', 'uploads', filePath)
   const ext = path.extname(filePath).toLowerCase()
 
-  // PDFs cannot be processed by vision API - mark for manual review
-  if (ext === '.pdf') {
-    return {
-      vendor: null,
-      amount: null,
-      currency: 'USD',
-      date: null,
-      category: null,
-      description: null,
-      payment_method: null,
-      raw_text: 'PDF uploaded - view in admin and enter details manually',
-    }
-  }
-
-  const imageData = fs.readFileSync(absolutePath)
-
-  // Determine media type from extension
-  let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/jpeg'
-  if (ext === '.png') mediaType = 'image/png'
-  else if (ext === '.gif') mediaType = 'image/gif'
-  else if (ext === '.webp') mediaType = 'image/webp'
+  const fileData = fs.readFileSync(absolutePath)
 
   // Check file size (max ~20MB for base64)
-  if (imageData.length > 15 * 1024 * 1024) {
+  if (fileData.length > 15 * 1024 * 1024) {
     return {
       vendor: null,
       amount: null,
@@ -73,11 +53,41 @@ export async function analyzeReceipt(filePath: string): Promise<ReceiptAnalysis>
       category: null,
       description: null,
       payment_method: null,
-      raw_text: 'Image too large for processing - please upload a smaller image',
+      raw_text: 'File too large for processing - please upload a smaller file',
     }
   }
 
-  const base64Image = imageData.toString('base64')
+  const base64Data = fileData.toString('base64')
+
+  // Build the content block based on file type
+  let fileContent: Anthropic.ImageBlockParam | Anthropic.DocumentBlockParam
+
+  if (ext === '.pdf') {
+    // Use Claude's native PDF support
+    fileContent = {
+      type: 'document',
+      source: {
+        type: 'base64',
+        media_type: 'application/pdf',
+        data: base64Data,
+      },
+    }
+  } else {
+    // Handle images
+    let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/jpeg'
+    if (ext === '.png') mediaType = 'image/png'
+    else if (ext === '.gif') mediaType = 'image/gif'
+    else if (ext === '.webp') mediaType = 'image/webp'
+
+    fileContent = {
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: mediaType,
+        data: base64Data,
+      },
+    }
+  }
 
   const anthropic = getAnthropicClient()
   const response = await anthropic.messages.create({
@@ -87,17 +97,10 @@ export async function analyzeReceipt(filePath: string): Promise<ReceiptAnalysis>
       {
         role: 'user',
         content: [
-          {
-            type: 'image',
-            source: {
-              type: 'base64',
-              media_type: mediaType,
-              data: base64Image,
-            },
-          },
+          fileContent,
           {
             type: 'text',
-            text: `Analyze this receipt image and extract the following information. Return your response as a JSON object with these exact fields:
+            text: `Analyze this receipt and extract the following information. Return your response as a JSON object with these exact fields:
 
 {
   "vendor": "Name of the merchant/vendor",
