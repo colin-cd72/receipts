@@ -100,10 +100,14 @@ export async function sendReceiptNotification(data: ReceiptNotificationData): Pr
             </tr>
           </table>
 
-          <div style="margin-top: 20px; padding: 15px; background: #f3f4f6; border-radius: 8px;">
+          <div style="margin-top: 20px; padding: 15px; background: #f3f4f6; border-radius: 8px; display: flex; gap: 20px;">
             <a href="${process.env.SITE_URL || 'https://receipts.co-l.in'}/admin"
                style="color: #3b82f6; text-decoration: none; font-weight: 500;">
               View in Admin Dashboard →
+            </a>
+            <a href="${process.env.SITE_URL || 'https://receipts.co-l.in'}/api/export/zip"
+               style="color: #7c3aed; text-decoration: none; font-weight: 500;">
+              Download All Receipts (ZIP) →
             </a>
           </div>
 
