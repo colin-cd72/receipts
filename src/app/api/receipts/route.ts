@@ -4,6 +4,7 @@ import path from 'path'
 import { insertReceipt, updateReceipt, getAllReceipts, getReceipt } from '@/lib/db'
 import { analyzeReceipt } from '@/lib/claude'
 import { sendReceiptNotification } from '@/lib/email'
+import { uploadReceiptToDropbox } from '@/lib/dropbox'
 import { randomUUID } from 'crypto'
 
 export async function POST(request: NextRequest) {
@@ -75,7 +76,7 @@ async function processReceiptAsync(receiptId: number, filename: string) {
       processed_at: new Date().toISOString(),
     })
 
-    // Send email notification
+    // Send email notification and upload to Dropbox
     const receipt = getReceipt(receiptId)
     if (receipt) {
       await sendReceiptNotification({
@@ -88,6 +89,18 @@ async function processReceiptAsync(receiptId: number, filename: string) {
         category: analysis.category,
         originalFilename: receipt.original_filename,
       })
+
+      // Upload to Dropbox
+      const dropboxResult = await uploadReceiptToDropbox(
+        filename,
+        analysis.vendor || null,
+        analysis.amount || null,
+        analysis.date || null,
+        receipt.original_filename
+      )
+      if (dropboxResult.success) {
+        console.log('Receipt uploaded to Dropbox:', dropboxResult.path)
+      }
     }
   } catch (error) {
     console.error('Processing error for receipt', receiptId, error)
