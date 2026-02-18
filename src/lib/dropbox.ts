@@ -70,9 +70,9 @@ export async function uploadReceiptToDropbox(
   const amountStr = amount ? amount.toFixed(2) : '0.00'
   const smartFilename = `${safeVendor}_$${amountStr}${ext}`
 
-  // Organize by date folder
+  // Organize by date folder under TGL/Receipts
   const dateFolder = date || 'unknown-date'
-  const dropboxPath = `/${dateFolder}/${smartFilename}`
+  const dropboxPath = `/TGL/Receipts/${dateFolder}/${smartFilename}`
 
   return uploadToDropbox(localPath, dropboxPath)
 }
