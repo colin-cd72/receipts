@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Settings, Key, CheckCircle, AlertCircle, Loader2, ArrowLeft, Mail } from 'lucide-react'
+import { Settings, Key, CheckCircle, AlertCircle, Loader2, ArrowLeft, Mail, Cloud } from 'lucide-react'
 import Link from 'next/link'
 
 export default function SettingsPage() {
@@ -17,6 +17,8 @@ export default function SettingsPage() {
   const [smtpPass, setSmtpPass] = useState('')
   const [smtpFrom, setSmtpFrom] = useState('')
   const [notifyEmail, setNotifyEmail] = useState('')
+  const [dropboxToken, setDropboxToken] = useState('')
+  const [dropboxFolder, setDropboxFolder] = useState('/TGL/Receipts')
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testingEmail, setTestingEmail] = useState(false)
@@ -61,6 +63,8 @@ export default function SettingsPage() {
       setSmtpPass(data.smtpPass || '')
       setSmtpFrom(data.smtpFrom || '')
       setNotifyEmail(data.notifyEmail || '')
+      setDropboxToken(data.dropboxToken || '')
+      setDropboxFolder(data.dropboxFolder || '/TGL/Receipts')
       setAdminPassword('')
     } catch (error) {
       console.error('Failed to load settings:', error)
@@ -86,6 +90,8 @@ export default function SettingsPage() {
           smtpPass: smtpPass.trim() || undefined,
           smtpFrom: smtpFrom.trim() || undefined,
           notifyEmail: notifyEmail.trim() || undefined,
+          dropboxToken: dropboxToken.trim() || undefined,
+          dropboxFolder: dropboxFolder.trim() || undefined,
         }),
       })
 
@@ -364,6 +370,57 @@ export default function SettingsPage() {
                   )}
                   Send Test Email
                 </button>
+              </div>
+            </div>
+
+            {/* Dropbox Sync Section */}
+            <div className="bg-white rounded-xl border p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Cloud className="w-5 h-5 text-gray-600" />
+                <h2 className="text-lg font-semibold">Dropbox Sync</h2>
+              </div>
+              <p className="text-sm text-gray-500 mb-4">
+                Automatically sync processed receipts to your Dropbox folder.
+              </p>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Dropbox Access Token
+                  </label>
+                  <input
+                    type="password"
+                    value={dropboxToken}
+                    onChange={(e) => setDropboxToken(e.target.value)}
+                    placeholder="sl.u.xxxx..."
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-mono text-sm"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Get from{' '}
+                    <a
+                      href="https://www.dropbox.com/developers/apps"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline"
+                    >
+                      Dropbox Developer Apps
+                    </a>
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Dropbox Folder Path
+                  </label>
+                  <input
+                    type="text"
+                    value={dropboxFolder}
+                    onChange={(e) => setDropboxFolder(e.target.value)}
+                    placeholder="/TGL/Receipts"
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Receipts will be saved to: {dropboxFolder || '/TGL/Receipts'}/{'{date}'}/{'{vendor}'}_{'{amount}'}.jpg
+                  </p>
+                </div>
               </div>
             </div>
 

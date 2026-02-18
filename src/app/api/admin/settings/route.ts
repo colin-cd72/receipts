@@ -56,6 +56,8 @@ export async function GET() {
       smtpPass: env.SMTP_PASS || '',
       smtpFrom: env.SMTP_FROM || '',
       notifyEmail: env.NOTIFY_EMAIL || '',
+      dropboxToken: env.DROPBOX_ACCESS_TOKEN || '',
+      dropboxFolder: env.DROPBOX_FOLDER || '/TGL/Receipts',
     })
   } catch (error) {
     console.error('Error reading settings:', error)
@@ -65,7 +67,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { apiKey, adminPassword, smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom, notifyEmail } = await request.json()
+    const { apiKey, adminPassword, smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom, notifyEmail, dropboxToken, dropboxFolder } = await request.json()
 
     const env = parseEnvFile()
 
@@ -79,7 +81,7 @@ export async function POST(request: NextRequest) {
       process.env.ADMIN_PASSWORD = adminPassword.trim()
     }
 
-    // SMTP settings
+    // SMTP and Dropbox settings
     const smtpFields = [
       { key: 'SMTP_HOST', value: smtpHost },
       { key: 'SMTP_PORT', value: smtpPort },
@@ -87,6 +89,8 @@ export async function POST(request: NextRequest) {
       { key: 'SMTP_PASS', value: smtpPass },
       { key: 'SMTP_FROM', value: smtpFrom },
       { key: 'NOTIFY_EMAIL', value: notifyEmail },
+      { key: 'DROPBOX_ACCESS_TOKEN', value: dropboxToken },
+      { key: 'DROPBOX_FOLDER', value: dropboxFolder },
     ]
 
     for (const { key, value } of smtpFields) {

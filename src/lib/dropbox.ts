@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 
 const DROPBOX_ACCESS_TOKEN = process.env.DROPBOX_ACCESS_TOKEN
+const DROPBOX_FOLDER = process.env.DROPBOX_FOLDER || '/TGL/Receipts'
 
 interface UploadResult {
   success: boolean
@@ -70,9 +71,10 @@ export async function uploadReceiptToDropbox(
   const amountStr = amount ? amount.toFixed(2) : '0.00'
   const smartFilename = `${safeVendor}_$${amountStr}${ext}`
 
-  // Organize by date folder under TGL/Receipts
+  // Organize by date folder under configured path
   const dateFolder = date || 'unknown-date'
-  const dropboxPath = `/TGL/Receipts/${dateFolder}/${smartFilename}`
+  const basePath = DROPBOX_FOLDER.replace(/\/$/, '') // Remove trailing slash if any
+  const dropboxPath = `${basePath}/${dateFolder}/${smartFilename}`
 
   return uploadToDropbox(localPath, dropboxPath)
 }
