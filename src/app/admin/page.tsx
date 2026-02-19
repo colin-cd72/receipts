@@ -300,7 +300,8 @@ export default function AdminPage() {
       (r.date?.includes(query)) ||
       (r.category?.toLowerCase().includes(query)) ||
       (r.description?.toLowerCase().includes(query)) ||
-      (r.uploader_name?.toLowerCase().includes(query))
+      (r.uploader_name?.toLowerCase().includes(query)) ||
+      (r.raw_text?.toLowerCase().includes(query))
     )
   })
 
