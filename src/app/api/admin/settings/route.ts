@@ -58,6 +58,12 @@ export async function GET() {
       notifyEmail: env.NOTIFY_EMAIL || '',
       dropboxToken: env.DROPBOX_ACCESS_TOKEN || '',
       dropboxFolder: env.DROPBOX_FOLDER || '/TGL/Receipts',
+      imapHost: env.IMAP_HOST || '',
+      imapPort: env.IMAP_PORT || '993',
+      imapUser: env.IMAP_USER || '',
+      imapPass: env.IMAP_PASS || '',
+      imapMailbox: env.IMAP_MAILBOX || 'INBOX',
+      imapPollInterval: env.IMAP_POLL_INTERVAL || '60',
     })
   } catch (error) {
     console.error('Error reading settings:', error)
@@ -67,7 +73,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { apiKey, adminPassword, smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom, notifyEmail, dropboxToken, dropboxFolder } = await request.json()
+    const { apiKey, adminPassword, smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom, notifyEmail, dropboxToken, dropboxFolder, imapHost, imapPort, imapUser, imapPass, imapMailbox, imapPollInterval } = await request.json()
 
     const env = parseEnvFile()
 
@@ -91,6 +97,12 @@ export async function POST(request: NextRequest) {
       { key: 'NOTIFY_EMAIL', value: notifyEmail },
       { key: 'DROPBOX_ACCESS_TOKEN', value: dropboxToken },
       { key: 'DROPBOX_FOLDER', value: dropboxFolder },
+      { key: 'IMAP_HOST', value: imapHost },
+      { key: 'IMAP_PORT', value: imapPort },
+      { key: 'IMAP_USER', value: imapUser },
+      { key: 'IMAP_PASS', value: imapPass },
+      { key: 'IMAP_MAILBOX', value: imapMailbox },
+      { key: 'IMAP_POLL_INTERVAL', value: imapPollInterval },
     ]
 
     for (const { key, value } of smtpFields) {

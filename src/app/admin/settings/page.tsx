@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Settings, Key, CheckCircle, AlertCircle, Loader2, ArrowLeft, Mail, Cloud } from 'lucide-react'
+import { Settings, Key, CheckCircle, AlertCircle, Loader2, ArrowLeft, Mail, Cloud, Inbox } from 'lucide-react'
 import Link from 'next/link'
 
 export default function SettingsPage() {
@@ -19,6 +19,12 @@ export default function SettingsPage() {
   const [notifyEmail, setNotifyEmail] = useState('')
   const [dropboxToken, setDropboxToken] = useState('')
   const [dropboxFolder, setDropboxFolder] = useState('/TGL/Receipts')
+  const [imapHost, setImapHost] = useState('')
+  const [imapPort, setImapPort] = useState('993')
+  const [imapUser, setImapUser] = useState('')
+  const [imapPass, setImapPass] = useState('')
+  const [imapMailbox, setImapMailbox] = useState('INBOX')
+  const [imapPollInterval, setImapPollInterval] = useState('60')
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testingEmail, setTestingEmail] = useState(false)
@@ -65,6 +71,12 @@ export default function SettingsPage() {
       setNotifyEmail(data.notifyEmail || '')
       setDropboxToken(data.dropboxToken || '')
       setDropboxFolder(data.dropboxFolder || '/TGL/Receipts')
+      setImapHost(data.imapHost || '')
+      setImapPort(data.imapPort || '993')
+      setImapUser(data.imapUser || '')
+      setImapPass(data.imapPass || '')
+      setImapMailbox(data.imapMailbox || 'INBOX')
+      setImapPollInterval(data.imapPollInterval || '60')
       setAdminPassword('')
     } catch (error) {
       console.error('Failed to load settings:', error)
@@ -92,6 +104,12 @@ export default function SettingsPage() {
           notifyEmail: notifyEmail.trim() || undefined,
           dropboxToken: dropboxToken.trim() || undefined,
           dropboxFolder: dropboxFolder.trim() || undefined,
+          imapHost: imapHost.trim() || undefined,
+          imapPort: imapPort.trim() || undefined,
+          imapUser: imapUser.trim() || undefined,
+          imapPass: imapPass.trim() || undefined,
+          imapMailbox: imapMailbox.trim() || undefined,
+          imapPollInterval: imapPollInterval.trim() || undefined,
         }),
       })
 
@@ -419,6 +437,111 @@ export default function SettingsPage() {
                   />
                   <p className="text-xs text-gray-400 mt-1">
                     Receipts will be saved to: {dropboxFolder || '/TGL/Receipts'}/{'{date}'}/{'{vendor}'}_{'{amount}'}.jpg
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* IMAP Inbound Email Section */}
+            <div className="bg-white rounded-xl border p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Inbox className="w-5 h-5 text-gray-600" />
+                <h2 className="text-lg font-semibold">Inbound Email (IMAP)</h2>
+              </div>
+              <p className="text-sm text-gray-500 mb-4">
+                Poll an IMAP mailbox for forwarded receipt emails. The SMTP server will periodically check this inbox
+                for new emails with receipt attachments and process them automatically.
+              </p>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      IMAP Host
+                    </label>
+                    <input
+                      type="text"
+                      value={imapHost}
+                      onChange={(e) => setImapHost(e.target.value)}
+                      placeholder="imap.gmail.com"
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      IMAP Port
+                    </label>
+                    <input
+                      type="text"
+                      value={imapPort}
+                      onChange={(e) => setImapPort(e.target.value)}
+                      placeholder="993"
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      IMAP Username
+                    </label>
+                    <input
+                      type="text"
+                      value={imapUser}
+                      onChange={(e) => setImapUser(e.target.value)}
+                      placeholder="receipts@co-l.in"
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      IMAP Password
+                    </label>
+                    <input
+                      type="password"
+                      value={imapPass}
+                      onChange={(e) => setImapPass(e.target.value)}
+                      placeholder="App password"
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Mailbox
+                    </label>
+                    <input
+                      type="text"
+                      value={imapMailbox}
+                      onChange={(e) => setImapMailbox(e.target.value)}
+                      placeholder="INBOX"
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                      Folder to monitor (e.g., INBOX, Receipts)
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Poll Interval (seconds)
+                    </label>
+                    <input
+                      type="text"
+                      value={imapPollInterval}
+                      onChange={(e) => setImapPollInterval(e.target.value)}
+                      placeholder="60"
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                      How often to check for new emails (minimum 30)
+                    </p>
+                  </div>
+                </div>
+                <div className="p-3 bg-blue-50 rounded-lg">
+                  <p className="text-sm text-blue-700">
+                    <strong>Tip:</strong> For Gmail, use an App Password (not your regular password).
+                    Go to Google Account &rarr; Security &rarr; 2-Step Verification &rarr; App Passwords.
+                    The SMTP process must be restarted after changing IMAP settings.
                   </p>
                 </div>
               </div>

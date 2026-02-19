@@ -19,6 +19,9 @@ import {
   Grid,
   List,
   Archive,
+  Cloud,
+  AlertTriangle,
+  Mail,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -49,6 +52,7 @@ export default function AdminPage() {
   const [password, setPassword] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<'table' | 'gallery'>('table')
+  const [reviewCount, setReviewCount] = useState(0)
 
   useEffect(() => {
     // Check if already authenticated via session
@@ -81,9 +85,14 @@ export default function AdminPage() {
   const fetchReceipts = async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/receipts')
-      const data = await res.json()
-      setReceipts(data.receipts || [])
+      const [receiptsRes, reviewRes] = await Promise.all([
+        fetch('/api/receipts'),
+        fetch('/api/receipts/review'),
+      ])
+      const receiptsData = await receiptsRes.json()
+      const reviewData = await reviewRes.json()
+      setReceipts(receiptsData.receipts || [])
+      setReviewCount(reviewData.receipts?.length || 0)
     } catch (error) {
       console.error('Failed to fetch receipts:', error)
     }
@@ -102,6 +111,19 @@ export default function AdminPage() {
   }
 
   const [reprocessing, setReprocessing] = useState(false)
+  const [syncingDropbox, setSyncingDropbox] = useState(false)
+  const [dropboxModal, setDropboxModal] = useState<{
+    show: boolean
+    total: number
+    current: number
+    success: number
+    failed: number
+    skipped: number
+    alreadyInDropbox: number
+    currentFile: string
+    errors: string[]
+    complete: boolean
+  } | null>(null)
   const [processingProgress, setProcessingProgress] = useState<{
     total: number
     processed: number
@@ -207,6 +229,54 @@ export default function AdminPage() {
     }
   }
 
+  const handleSyncDropbox = async () => {
+    // Calculate counts before API call so modal shows immediately
+    const processedCount = receipts.filter(r => r.status === 'processed').length
+    const notProcessedCount = receipts.length - processedCount
+
+    setSyncingDropbox(true)
+    setDropboxModal({
+      show: true,
+      total: processedCount,
+      current: 0,
+      success: 0,
+      failed: 0,
+      skipped: notProcessedCount,
+      alreadyInDropbox: 0,
+      currentFile: 'Syncing to Dropbox...',
+      errors: [],
+      complete: false,
+    })
+
+    try {
+      const res = await fetch('/api/export/dropbox', { method: 'POST' })
+      const data = await res.json()
+
+      if (res.ok) {
+        setDropboxModal({
+          show: true,
+          total: data.total || 0,
+          current: data.total || 0,
+          success: data.success || 0,
+          failed: data.failed || 0,
+          skipped: data.skipped || 0,
+          alreadyInDropbox: data.alreadyInDropbox || 0,
+          currentFile: '',
+          errors: data.errors || [],
+          complete: true,
+        })
+      } else {
+        alert(`Sync failed: ${data.error}`)
+        setDropboxModal(null)
+      }
+    } catch (error) {
+      console.error('Failed to sync to Dropbox:', error)
+      alert('Failed to sync to Dropbox')
+      setDropboxModal(null)
+    }
+    setSyncingDropbox(false)
+  }
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'processed':
@@ -276,6 +346,22 @@ export default function AdminPage() {
           <h1 className="text-2xl font-bold text-gray-900">Receipt Admin</h1>
           <div className="flex gap-3">
             <Link
+              href="/admin/inbox"
+              className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg hover:bg-gray-50 transition"
+            >
+              <Mail className="w-4 h-4" />
+              Inbox
+            </Link>
+            {reviewCount > 0 && (
+              <Link
+                href="/admin/review"
+                className="flex items-center gap-2 px-4 py-2 bg-amber-100 border border-amber-300 text-amber-800 rounded-lg hover:bg-amber-200 transition"
+              >
+                <AlertTriangle className="w-4 h-4" />
+                Review ({reviewCount})
+              </Link>
+            )}
+            <Link
               href="/admin/settings"
               className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg hover:bg-gray-50 transition"
             >
@@ -322,6 +408,18 @@ export default function AdminPage() {
               <Archive className="w-4 h-4" />
               Download ZIP
             </a>
+            <button
+              onClick={handleSyncDropbox}
+              disabled={syncingDropbox}
+              className="flex items-center gap-2 px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition disabled:opacity-50"
+            >
+              {syncingDropbox ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Cloud className="w-4 h-4" />
+              )}
+              Sync Dropbox
+            </button>
           </div>
         </div>
 
@@ -685,6 +783,112 @@ export default function AdminPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Dropbox Sync Modal */}
+        {dropboxModal?.show && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4 overflow-hidden">
+              {/* Header */}
+              <div className="bg-sky-600 px-6 py-4 flex items-center gap-3">
+                <Cloud className="w-6 h-6 text-white" />
+                <h2 className="text-lg font-semibold text-white">
+                  {dropboxModal.complete ? 'Dropbox Sync Complete' : 'Syncing to Dropbox'}
+                </h2>
+              </div>
+
+              {/* Content */}
+              <div className="p-6">
+                {/* Progress Bar */}
+                <div className="mb-4">
+                  <div className="flex justify-between text-sm text-gray-600 mb-2">
+                    <span>
+                      {dropboxModal.complete
+                        ? `Uploaded ${dropboxModal.success} of ${dropboxModal.total} files`
+                        : dropboxModal.total === 0
+                        ? 'No processed receipts to sync'
+                        : `Syncing ${dropboxModal.total} receipts...`}
+                    </span>
+                    <span>
+                      {dropboxModal.complete && dropboxModal.total > 0
+                        ? '100%'
+                        : dropboxModal.complete
+                        ? '-'
+                        : ''}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div
+                      className={`h-3 rounded-full transition-all duration-300 ${
+                        dropboxModal.complete
+                          ? 'bg-green-500'
+                          : 'bg-sky-500 animate-pulse'
+                      }`}
+                      style={{
+                        width: dropboxModal.complete
+                          ? '100%'
+                          : dropboxModal.total > 0
+                          ? '50%'
+                          : '0%',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Current File */}
+                {!dropboxModal.complete && dropboxModal.currentFile && (
+                  <div className="mb-4 flex items-center gap-2 text-sm text-gray-600">
+                    <Loader2 className="w-4 h-4 animate-spin text-sky-500" />
+                    <span className="truncate">{dropboxModal.currentFile}</span>
+                  </div>
+                )}
+
+                {/* Stats */}
+                <div className="grid grid-cols-4 gap-3 mb-4">
+                  <div className="bg-green-50 rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold text-green-600">{dropboxModal.success}</p>
+                    <p className="text-xs text-green-700">Uploaded</p>
+                  </div>
+                  <div className="bg-sky-50 rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold text-sky-600">{dropboxModal.alreadyInDropbox}</p>
+                    <p className="text-xs text-sky-700">Already There</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold text-gray-600">{dropboxModal.skipped}</p>
+                    <p className="text-xs text-gray-700">Not Processed</p>
+                  </div>
+                  <div className="bg-red-50 rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold text-red-600">{dropboxModal.failed}</p>
+                    <p className="text-xs text-red-700">Failed</p>
+                  </div>
+                </div>
+
+                {/* Errors */}
+                {dropboxModal.errors.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-sm font-medium text-red-600 mb-2">Errors:</p>
+                    <div className="bg-red-50 rounded-lg p-3 max-h-32 overflow-y-auto">
+                      {dropboxModal.errors.map((error, i) => (
+                        <p key={i} className="text-xs text-red-700 mb-1">
+                          {error}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Close Button */}
+                {dropboxModal.complete && (
+                  <button
+                    onClick={() => setDropboxModal(null)}
+                    className="w-full bg-sky-600 text-white py-2 rounded-lg hover:bg-sky-700 transition"
+                  >
+                    Close
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>

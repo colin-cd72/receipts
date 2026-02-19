@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { writeFile } from 'fs/promises'
 import path from 'path'
-import { insertReceipt, updateReceipt, getAllReceipts, getReceipt } from '@/lib/db'
+import { insertReceipt, updateReceipt, getAllReceipts, getReceipt, generateEditToken, markFixEmailSent } from '@/lib/db'
 import { analyzeReceipt } from '@/lib/claude'
-import { sendReceiptNotification } from '@/lib/email'
+import { sendReceiptNotification, sendFixReceiptEmail } from '@/lib/email'
 import { uploadReceiptToDropbox } from '@/lib/dropbox'
 import { randomUUID } from 'crypto'
 
@@ -100,6 +100,28 @@ async function processReceiptAsync(receiptId: number, filename: string) {
       )
       if (dropboxResult.success) {
         console.log('Receipt uploaded to Dropbox:', dropboxResult.path)
+      }
+
+      // Send fix email if data is missing and user has email
+      const needsFix = !analysis.vendor || !analysis.amount || !analysis.date || (analysis.date && analysis.date < '2025-10-01')
+      if (needsFix && receipt.uploader_email) {
+        const siteUrl = process.env.SITE_URL || 'https://receipts.co-l.in'
+        const token = generateEditToken(receiptId)
+        const emailSent = await sendFixReceiptEmail({
+          uploaderName: receipt.uploader_name,
+          uploaderEmail: receipt.uploader_email,
+          receiptId: receipt.id,
+          editToken: token,
+          vendor: analysis.vendor,
+          amount: analysis.amount,
+          date: analysis.date,
+          originalFilename: receipt.original_filename,
+          imageUrl: `${siteUrl}/api/receipts/${receipt.id}/image`,
+        })
+        if (emailSent) {
+          markFixEmailSent(receiptId)
+          console.log('Fix email sent to:', receipt.uploader_email)
+        }
       }
     }
   } catch (error) {
