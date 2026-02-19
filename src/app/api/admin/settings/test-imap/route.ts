@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Imap from 'imap'
+import { ImapFlow } from 'imapflow'
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,103 +17,61 @@ export async function POST(request: NextRequest) {
     logs.push(`Connecting to ${imapHost.trim()}:${port} (TLS: ${port === 993}) as ${imapUser.trim()}`)
     logs.push(`Mailbox: ${mailbox}`)
 
-    const result = await new Promise<{
-      success: boolean
-      messages?: number
-      recent?: number
-      unseen?: number
-      error?: string
-      capabilities?: string
-    }>((resolve) => {
-      const timeout = setTimeout(() => {
-        logs.push(`TIMEOUT after 15s`)
-        resolve({ success: false, error: `Connection timed out after 15 seconds. Check host and port.` })
-      }, 15000)
-
-      const imap = new Imap({
+    const client = new ImapFlow({
+      host: imapHost.trim(),
+      port,
+      secure: port === 993,
+      auth: {
         user: imapUser.trim(),
-        password: imapPass.trim(),
-        host: imapHost.trim(),
-        port,
-        tls: port === 993,
-        tlsOptions: { rejectUnauthorized: false },
-        connTimeout: 10000,
-        authTimeout: 10000,
-        debug: (msg: string) => {
-          // Capture protocol-level messages for diagnostics
-          // Redact password from debug output
-          const clean = msg.replace(/AUTHENTICATE PLAIN .+/, 'AUTHENTICATE PLAIN ***REDACTED***')
-            .replace(/LOGIN "[^"]*" "[^"]*"/, 'LOGIN "***" "***"')
-          logs.push(clean)
-        },
-      })
-
-      imap.once('ready', () => {
-        const elapsed = Date.now() - startTime
-        logs.push(`Connected and authenticated in ${elapsed}ms`)
-
-        imap.openBox(mailbox, true, (err: Error | null, box: Imap.Box) => {
-          clearTimeout(timeout)
-          if (err) {
-            logs.push(`ERROR opening mailbox: ${err.message}`)
-            imap.end()
-            resolve({ success: false, error: `Failed to open mailbox "${mailbox}": ${err.message}` })
-            return
-          }
-
-          logs.push(`Mailbox opened: ${box.messages.total} total, ${box.messages.new} recent`)
-
-          // Count unseen messages
-          imap.search(['UNSEEN'], (searchErr: Error | null, uids: number[]) => {
-            const unseen = searchErr ? 0 : (uids?.length || 0)
-            logs.push(`Unseen messages: ${unseen}`)
-            logs.push(`Total time: ${Date.now() - startTime}ms`)
-            imap.end()
-            resolve({
-              success: true,
-              messages: box.messages.total,
-              recent: box.messages.new,
-              unseen,
-            })
-          })
-        })
-      })
-
-      imap.once('error', (err: Error) => {
-        clearTimeout(timeout)
-        const elapsed = Date.now() - startTime
-        logs.push(`ERROR after ${elapsed}ms: ${err.message}`)
-
-        // Provide helpful diagnostics based on error type
-        let diagnostic = err.message
-        if (err.message.includes('Authentication failed') || err.message.includes('AUTHENTICATIONFAILED')) {
-          diagnostic = `Authentication failed for "${imapUser.trim()}". Check: (1) Password is correct, (2) For Gmail use an App Password, (3) Account is not locked/disabled, (4) IMAP access is enabled in email provider settings.`
-        } else if (err.message.includes('ENOTFOUND') || err.message.includes('getaddrinfo')) {
-          diagnostic = `DNS lookup failed for "${imapHost.trim()}". Check the hostname is correct.`
-        } else if (err.message.includes('ECONNREFUSED')) {
-          diagnostic = `Connection refused at ${imapHost.trim()}:${port}. Check host and port, and ensure IMAP is enabled.`
-        } else if (err.message.includes('ETIMEDOUT') || err.message.includes('timeout')) {
-          diagnostic = `Connection timed out to ${imapHost.trim()}:${port}. Check host, port, and firewall settings.`
-        } else if (err.message.includes('certificate') || err.message.includes('SSL') || err.message.includes('TLS')) {
-          diagnostic = `TLS/SSL error: ${err.message}. Try port 143 (non-TLS) or check certificate settings.`
-        }
-
-        resolve({ success: false, error: diagnostic })
-      })
-
-      imap.connect()
+        pass: imapPass.trim(),
+      },
+      tls: { rejectUnauthorized: false },
+      logger: {
+        debug: (msg: { msg: string }) => logs.push(`[DEBUG] ${msg.msg}`),
+        info: (msg: { msg: string }) => logs.push(`[INFO] ${msg.msg}`),
+        warn: (msg: { msg: string }) => logs.push(`[WARN] ${msg.msg}`),
+        error: (msg: { msg: string }) => logs.push(`[ERROR] ${msg.msg}`),
+      },
     })
 
-    if (result.success) {
+    try {
+      await client.connect()
+      const elapsed = Date.now() - startTime
+      logs.push(`Connected and authenticated in ${elapsed}ms`)
+
+      const status = await client.status(mailbox, { messages: true, unseen: true, recent: true })
+      logs.push(`Mailbox status: ${status.messages} total, ${status.unseen} unseen, ${status.recent} recent`)
+      logs.push(`Total time: ${Date.now() - startTime}ms`)
+
+      await client.logout()
+
       return NextResponse.json({
         success: true,
-        messages: result.messages,
-        recent: result.recent,
-        unseen: result.unseen,
+        messages: status.messages,
+        recent: status.recent,
+        unseen: status.unseen,
         logs,
       })
-    } else {
-      return NextResponse.json({ error: result.error, logs }, { status: 400 })
+    } catch (err: unknown) {
+      const elapsed = Date.now() - startTime
+      const error = err as { message?: string; responseText?: string; code?: string }
+      const msg = error.responseText || error.message || String(err)
+      logs.push(`ERROR after ${elapsed}ms: ${msg}`)
+
+      let diagnostic = msg
+      if (msg.includes('Authentication') || msg.includes('auth') || msg.includes('LOGIN') || msg.includes('AUTHENTICATIONFAILED')) {
+        diagnostic = `Authentication failed for "${imapUser.trim()}". Check: (1) Password is correct, (2) For Gmail use an App Password, (3) Account is not locked/disabled, (4) IMAP access is enabled in email provider settings.`
+      } else if (msg.includes('ENOTFOUND') || msg.includes('getaddrinfo')) {
+        diagnostic = `DNS lookup failed for "${imapHost.trim()}". Check the hostname is correct.`
+      } else if (msg.includes('ECONNREFUSED')) {
+        diagnostic = `Connection refused at ${imapHost.trim()}:${port}. Check host and port.`
+      } else if (msg.includes('ETIMEDOUT') || msg.includes('timeout')) {
+        diagnostic = `Connection timed out. Check host, port, and firewall.`
+      }
+
+      try { await client.logout() } catch { /* ignore */ }
+
+      return NextResponse.json({ error: diagnostic, logs }, { status: 400 })
     }
   } catch (error: unknown) {
     console.error('Test IMAP error:', error)

@@ -10,7 +10,7 @@
 
 const { SMTPServer } = require('smtp-server')
 const { simpleParser } = require('mailparser')
-const Imap = require('imap')
+const { ImapFlow } = require('imapflow')
 const Database = require('better-sqlite3')
 const Anthropic = require('@anthropic-ai/sdk').default
 const nodemailer = require('nodemailer')
@@ -612,7 +612,7 @@ function reloadImapConfig() {
 
 let imapPolling = false
 
-function pollImap() {
+async function pollImap() {
   if (imapPolling) return
   const config = reloadImapConfig()
 
@@ -624,113 +624,73 @@ function pollImap() {
   const pollStart = Date.now()
   log('IMAP', `Connecting to ${config.user}@${config.host}:${config.port} (TLS: ${config.port === 993}) mailbox: ${config.mailbox}`)
 
-  const imap = new Imap({
-    user: config.user,
-    password: config.pass,
+  const client = new ImapFlow({
     host: config.host,
     port: config.port,
-    tls: config.port === 993,
-    tlsOptions: { rejectUnauthorized: false },
-    connTimeout: 15000,
-    authTimeout: 15000,
+    secure: config.port === 993,
+    auth: {
+      user: config.user,
+      pass: config.pass,
+    },
+    tls: { rejectUnauthorized: false },
+    logger: false,
   })
 
-  imap.once('ready', () => {
+  try {
+    await client.connect()
     log('IMAP', `Connected in ${Date.now() - pollStart}ms`)
-    imap.openBox(config.mailbox, false, (err, box) => {
-      if (err) {
-        log('IMAP', `ERROR opening mailbox "${config.mailbox}": ${err.message}`)
-        imap.end()
-        imapPolling = false
+
+    const lock = await client.getMailboxLock(config.mailbox)
+    try {
+      const status = await client.status(config.mailbox, { messages: true, unseen: true, recent: true })
+      log('IMAP', `Mailbox: ${status.messages} total, ${status.unseen} unseen, ${status.recent} recent`)
+
+      if (status.unseen === 0) {
+        log('IMAP', `No unseen messages (poll took ${Date.now() - pollStart}ms)`)
         return
       }
 
-      log('IMAP', `Mailbox opened: ${box.messages.total} total, ${box.messages.new} recent`)
+      // Fetch unseen messages
+      let succeeded = 0
+      let skipped = 0
+      let errors = 0
 
-      // Search for unseen messages
-      imap.search(['UNSEEN'], (err, uids) => {
-        if (err) {
-          log('IMAP', `ERROR searching: ${err.message}`)
-          imap.end()
-          imapPolling = false
-          return
-        }
+      for await (const msg of client.fetch({ seen: false }, { source: true, flags: true, uid: true })) {
+        try {
+          const parsed = await simpleParser(msg.source)
+          const fromAddr = parsed.from?.value?.[0]?.address?.toLowerCase() || ''
+          const subject = parsed.subject || '(no subject)'
 
-        if (!uids || uids.length === 0) {
-          log('IMAP', `No unseen messages (poll took ${Date.now() - pollStart}ms)`)
-          imap.end()
-          imapPolling = false
-          return
-        }
+          log('IMAP', `  Message UID ${msg.uid}: from=${fromAddr} subject="${subject}" attachments=${(parsed.attachments || []).length}`)
 
-        log('IMAP', `Found ${uids.length} unseen message(s), fetching...`)
-        let processed = 0
-        let succeeded = 0
-        let skipped = 0
-
-        const fetch = imap.fetch(uids, { bodies: '', markSeen: true })
-
-        fetch.on('message', (msg, seqno) => {
-          const chunks = []
-
-          msg.on('body', (stream) => {
-            stream.on('data', chunk => chunks.push(chunk))
-          })
-
-          msg.on('end', async () => {
-            try {
-              const raw = Buffer.concat(chunks)
-              const parsed = await simpleParser(raw)
-              const fromAddr = parsed.from?.value?.[0]?.address?.toLowerCase() || ''
-              const subject = parsed.subject || '(no subject)'
-
-              log('IMAP', `  Message #${seqno}: from=${fromAddr} subject="${subject}" attachments=${(parsed.attachments || []).length}`)
-
-              // Check sender allowlist
-              const allowed = getAllowedSenders()
-              if (allowed.length === 0) {
-                log('IMAP', `  REJECTED: No allowed senders configured`)
-                skipped++
-              } else if (!allowed.includes(fromAddr)) {
-                log('IMAP', `  REJECTED: Sender not in allowlist: ${fromAddr}`)
-                skipped++
-              } else {
-                await processEmail(parsed)
-                succeeded++
-              }
-            } catch (err) {
-              log('IMAP', `  ERROR processing message #${seqno}: ${err.message || err}`)
-            }
-
-            processed++
-            if (processed === uids.length) {
-              log('IMAP', `Poll complete: ${succeeded} processed, ${skipped} skipped, ${processed - succeeded - skipped} errors (${Date.now() - pollStart}ms)`)
-              imap.end()
-              imapPolling = false
-            }
-          })
-        })
-
-        fetch.once('error', (err) => {
-          log('IMAP', `ERROR fetching: ${err.message}`)
-          imap.end()
-          imapPolling = false
-        })
-
-        fetch.once('end', () => {
-          // Wait for all message 'end' events before closing
-          if (processed === uids.length) {
-            imap.end()
-            imapPolling = false
+          // Check sender allowlist
+          const allowed = getAllowedSenders()
+          if (allowed.length === 0) {
+            log('IMAP', `  REJECTED: No allowed senders configured`)
+            skipped++
+          } else if (!allowed.includes(fromAddr)) {
+            log('IMAP', `  REJECTED: Sender not in allowlist: ${fromAddr}`)
+            skipped++
+          } else {
+            await processEmail(parsed)
+            succeeded++
           }
-        })
-      })
-    })
-  })
 
-  imap.once('error', (err) => {
-    let detail = err.message
-    if (detail.includes('Authentication failed') || detail.includes('AUTHENTICATIONFAILED')) {
+          // Mark as seen
+          await client.messageFlagsAdd({ uid: msg.uid }, ['\\Seen'])
+        } catch (err) {
+          log('IMAP', `  ERROR processing message: ${err.message || err}`)
+          errors++
+        }
+      }
+
+      log('IMAP', `Poll complete: ${succeeded} processed, ${skipped} skipped, ${errors} errors (${Date.now() - pollStart}ms)`)
+    } finally {
+      lock.release()
+    }
+  } catch (err) {
+    let detail = err.message || String(err)
+    if (detail.includes('Authentication') || detail.includes('auth') || detail.includes('LOGIN')) {
       detail += ' -- Check password, ensure IMAP access is enabled in email provider'
     } else if (detail.includes('ENOTFOUND')) {
       detail += ' -- DNS lookup failed, check hostname'
@@ -739,15 +699,11 @@ function pollImap() {
     } else if (detail.includes('ETIMEDOUT')) {
       detail += ' -- Timed out, check host/port/firewall'
     }
-    log('IMAP', `CONNECTION ERROR: ${detail}`)
+    log('IMAP', `ERROR: ${detail}`)
+  } finally {
+    try { await client.logout() } catch {}
     imapPolling = false
-  })
-
-  imap.once('end', () => {
-    imapPolling = false
-  })
-
-  imap.connect()
+  }
 }
 
 // Start IMAP polling loop

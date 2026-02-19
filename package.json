@@ -25,6 +25,7 @@
     "better-sqlite3": "^12.6.2",
     "dotenv": "^17.3.1",
     "imap": "^0.8.19",
+    "imapflow": "^1.2.10",
     "lucide-react": "^0.562.0",
     "mailparser": "^3.9.3",
     "next": "^16.1.3",
