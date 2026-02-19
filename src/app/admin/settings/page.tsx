@@ -29,6 +29,7 @@ export default function SettingsPage() {
   const [testing, setTesting] = useState(false)
   const [testingEmail, setTestingEmail] = useState(false)
   const [testingImap, setTestingImap] = useState(false)
+  const [imapLogs, setImapLogs] = useState<string[] | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   useEffect(() => {
@@ -189,6 +190,7 @@ export default function SettingsPage() {
   const testImap = async () => {
     setTestingImap(true)
     setMessage(null)
+    setImapLogs(null)
 
     try {
       const res = await fetch('/api/admin/settings/test-imap', {
@@ -204,6 +206,7 @@ export default function SettingsPage() {
       })
 
       const data = await res.json()
+      if (data.logs) setImapLogs(data.logs)
 
       if (res.ok) {
         setMessage({
@@ -594,6 +597,16 @@ export default function SettingsPage() {
                     Restart the SMTP process after changing IMAP settings (<code className="bg-blue-100 px-1 rounded">pm2 restart receipts-smtp</code>).
                   </p>
                 </div>
+                {imapLogs && imapLogs.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-1">Connection Log</p>
+                    <pre className="p-3 bg-gray-900 text-green-400 rounded-lg text-xs overflow-auto max-h-48 font-mono">
+                      {imapLogs.map((line, i) => (
+                        <div key={i}>{line}</div>
+                      ))}
+                    </pre>
+                  </div>
+                )}
               </div>
             </div>
 

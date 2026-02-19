@@ -729,7 +729,17 @@ function pollImap() {
   })
 
   imap.once('error', (err) => {
-    log('IMAP', `CONNECTION ERROR: ${err.message}`)
+    let detail = err.message
+    if (detail.includes('Authentication failed') || detail.includes('AUTHENTICATIONFAILED')) {
+      detail += ' -- Check password, ensure IMAP access is enabled in email provider'
+    } else if (detail.includes('ENOTFOUND')) {
+      detail += ' -- DNS lookup failed, check hostname'
+    } else if (detail.includes('ECONNREFUSED')) {
+      detail += ' -- Connection refused, check host/port'
+    } else if (detail.includes('ETIMEDOUT')) {
+      detail += ' -- Timed out, check host/port/firewall'
+    }
+    log('IMAP', `CONNECTION ERROR: ${detail}`)
     imapPolling = false
   })
 
