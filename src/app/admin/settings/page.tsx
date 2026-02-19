@@ -28,6 +28,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testingEmail, setTestingEmail] = useState(false)
+  const [testingImap, setTestingImap] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   useEffect(() => {
@@ -183,6 +184,40 @@ export default function SettingsPage() {
     }
 
     setTesting(false)
+  }
+
+  const testImap = async () => {
+    setTestingImap(true)
+    setMessage(null)
+
+    try {
+      const res = await fetch('/api/admin/settings/test-imap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imapHost: imapHost.trim(),
+          imapPort: imapPort.trim(),
+          imapUser: imapUser.trim(),
+          imapPass: imapPass.trim(),
+          imapMailbox: imapMailbox.trim(),
+        }),
+      })
+
+      const data = await res.json()
+
+      if (res.ok) {
+        setMessage({
+          type: 'success',
+          text: `IMAP connected! Mailbox: ${imapMailbox || 'INBOX'} — ${data.messages} total, ${data.unseen} unseen, ${data.recent} recent`,
+        })
+      } else {
+        setMessage({ type: 'error', text: data.error || 'IMAP connection failed' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to test IMAP connection' })
+    }
+
+    setTestingImap(false)
   }
 
   if (!authenticated) {
@@ -537,11 +572,26 @@ export default function SettingsPage() {
                     </p>
                   </div>
                 </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={testImap}
+                    disabled={testingImap || !imapHost.trim() || !imapUser.trim() || !imapPass.trim()}
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition disabled:opacity-50"
+                  >
+                    {testingImap ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Inbox className="w-4 h-4" />
+                    )}
+                    Test IMAP Connection
+                  </button>
+                </div>
                 <div className="p-3 bg-blue-50 rounded-lg">
                   <p className="text-sm text-blue-700">
                     <strong>Tip:</strong> For Gmail, use an App Password (not your regular password).
                     Go to Google Account &rarr; Security &rarr; 2-Step Verification &rarr; App Passwords.
-                    The SMTP process must be restarted after changing IMAP settings.
+                    Restart the SMTP process after changing IMAP settings (<code className="bg-blue-100 px-1 rounded">pm2 restart receipts-smtp</code>).
                   </p>
                 </div>
               </div>

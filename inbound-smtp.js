@@ -21,6 +21,16 @@ const path = require('path')
 // Load environment variables
 require('dotenv').config()
 
+// ── Logging ─────────────────────────────────────────────────────────────────
+
+function timestamp() {
+  return new Date().toISOString().replace('T', ' ').substring(0, 19)
+}
+
+function log(prefix, ...args) {
+  console.log(`[${timestamp()}] [${prefix}]`, ...args)
+}
+
 // ── Database setup ──────────────────────────────────────────────────────────
 
 const dbPath = path.join(process.cwd(), 'data', 'receipts.db')
@@ -386,13 +396,13 @@ async function processEmail(parsed) {
   const subject = parsed.subject || '(no subject)'
   const bodyText = parsed.text || ''
 
-  console.log(`Processing email from ${fromAddr}: "${subject}"`)
+  log('EMAIL', `Processing from ${fromAddr}: "${subject}" (${(parsed.attachments || []).length} attachments)`)
 
   // Dedup by message ID
   if (messageId) {
     const existing = getInboundEmailByMessageId(messageId)
     if (existing) {
-      console.log('Duplicate email (message_id already seen), skipping:', messageId)
+      log('EMAIL', `Duplicate (message_id already seen), skipping: ${messageId}`)
       return
     }
   }
@@ -477,9 +487,9 @@ async function processEmail(parsed) {
         successResults.push({ original_filename: originalFilename, vendor: analysis.vendor, amount: analysis.amount, date: analysis.date, category: analysis.category })
       }
 
-      console.log(`  Processed: ${originalFilename} -> vendor=${analysis.vendor}, amount=${analysis.amount}`)
+      log('EMAIL', `  Processed: ${originalFilename} -> vendor=${analysis.vendor}, amount=${analysis.amount}, date=${analysis.date}`)
     } catch (err) {
-      console.error('  Attachment processing error:', err)
+      log('EMAIL', `  Attachment error: ${err.message || err}`)
     }
   }
 
@@ -501,7 +511,7 @@ async function processEmail(parsed) {
     reply_sent: replySent ? 1 : 0,
   })
 
-  console.log(`Email processed: ${successResults.length} success, ${fixResults.length} need fix, reply ${replySent ? 'sent' : 'not sent'}`)
+  log('EMAIL', `Complete: ${successResults.length} success, ${fixResults.length} need fix, reply ${replySent ? 'sent' : 'not sent'}`)
 }
 
 // ── SMTP Server ─────────────────────────────────────────────────────────────
@@ -526,11 +536,11 @@ const server = new SMTPServer({
     const sender = address.address.toLowerCase()
     const allowed = getAllowedSenders()
     if (allowed.length === 0) {
-      console.log('No allowed senders configured - rejecting all. Add senders in admin settings.')
+      log('SMTP', 'No allowed senders configured - rejecting all')
       return callback(new Error('Sender not authorized - no allowed senders configured'))
     }
     if (!allowed.includes(sender)) {
-      console.log(`Rejected email from unauthorized sender: ${sender}`)
+      log('SMTP', `Rejected unauthorized sender: ${sender}`)
       return callback(new Error('Sender not authorized'))
     }
     callback()
@@ -559,19 +569,18 @@ const server = new SMTPServer({
 const PORT = parseInt(process.env.SMTP_LISTEN_PORT || '25', 10)
 
 server.listen(PORT, () => {
-  console.log(`SMTP server listening on port ${PORT}`)
-  console.log(`Accepting emails to receipts@co-l.in`)
+  log('SMTP', `Listening on port ${PORT}`)
+  log('SMTP', 'Accepting emails to receipts@co-l.in')
   const allowed = getAllowedSenders()
   if (allowed.length === 0) {
-    console.log('WARNING: No allowed senders configured. All emails will be rejected.')
-    console.log('Add allowed senders via the admin settings page.')
+    log('SMTP', 'WARNING: No allowed senders configured. All emails will be rejected.')
   } else {
-    console.log(`Allowed senders: ${allowed.join(', ')}`)
+    log('SMTP', `Allowed senders (${allowed.length}): ${allowed.join(', ')}`)
   }
 })
 
 server.on('error', err => {
-  console.error('SMTP server error:', err)
+  log('SMTP', `ERROR: ${err.message}`)
 })
 
 // ── IMAP Polling ────────────────────────────────────────────────────────────
@@ -612,7 +621,8 @@ function pollImap() {
   }
 
   imapPolling = true
-  console.log(`[IMAP] Checking ${config.user}@${config.host}:${config.port} / ${config.mailbox}`)
+  const pollStart = Date.now()
+  log('IMAP', `Connecting to ${config.user}@${config.host}:${config.port} (TLS: ${config.port === 993}) mailbox: ${config.mailbox}`)
 
   const imap = new Imap({
     user: config.user,
@@ -626,36 +636,41 @@ function pollImap() {
   })
 
   imap.once('ready', () => {
+    log('IMAP', `Connected in ${Date.now() - pollStart}ms`)
     imap.openBox(config.mailbox, false, (err, box) => {
       if (err) {
-        console.error('[IMAP] Error opening mailbox:', err.message)
+        log('IMAP', `ERROR opening mailbox "${config.mailbox}": ${err.message}`)
         imap.end()
         imapPolling = false
         return
       }
 
+      log('IMAP', `Mailbox opened: ${box.messages.total} total, ${box.messages.new} recent`)
+
       // Search for unseen messages
       imap.search(['UNSEEN'], (err, uids) => {
         if (err) {
-          console.error('[IMAP] Search error:', err.message)
+          log('IMAP', `ERROR searching: ${err.message}`)
           imap.end()
           imapPolling = false
           return
         }
 
         if (!uids || uids.length === 0) {
-          console.log('[IMAP] No new messages')
+          log('IMAP', `No unseen messages (poll took ${Date.now() - pollStart}ms)`)
           imap.end()
           imapPolling = false
           return
         }
 
-        console.log(`[IMAP] Found ${uids.length} new message(s)`)
+        log('IMAP', `Found ${uids.length} unseen message(s), fetching...`)
         let processed = 0
+        let succeeded = 0
+        let skipped = 0
 
         const fetch = imap.fetch(uids, { bodies: '', markSeen: true })
 
-        fetch.on('message', (msg) => {
+        fetch.on('message', (msg, seqno) => {
           const chunks = []
 
           msg.on('body', (stream) => {
@@ -666,23 +681,30 @@ function pollImap() {
             try {
               const raw = Buffer.concat(chunks)
               const parsed = await simpleParser(raw)
+              const fromAddr = parsed.from?.value?.[0]?.address?.toLowerCase() || ''
+              const subject = parsed.subject || '(no subject)'
+
+              log('IMAP', `  Message #${seqno}: from=${fromAddr} subject="${subject}" attachments=${(parsed.attachments || []).length}`)
 
               // Check sender allowlist
-              const fromAddr = parsed.from?.value?.[0]?.address?.toLowerCase() || ''
               const allowed = getAllowedSenders()
-              if (allowed.length > 0 && !allowed.includes(fromAddr)) {
-                console.log(`[IMAP] Skipping email from unauthorized sender: ${fromAddr}`)
-              } else if (allowed.length === 0) {
-                console.log(`[IMAP] No allowed senders configured, skipping: ${fromAddr}`)
+              if (allowed.length === 0) {
+                log('IMAP', `  REJECTED: No allowed senders configured`)
+                skipped++
+              } else if (!allowed.includes(fromAddr)) {
+                log('IMAP', `  REJECTED: Sender not in allowlist: ${fromAddr}`)
+                skipped++
               } else {
                 await processEmail(parsed)
+                succeeded++
               }
             } catch (err) {
-              console.error('[IMAP] Email processing error:', err)
+              log('IMAP', `  ERROR processing message #${seqno}: ${err.message || err}`)
             }
 
             processed++
             if (processed === uids.length) {
+              log('IMAP', `Poll complete: ${succeeded} processed, ${skipped} skipped, ${processed - succeeded - skipped} errors (${Date.now() - pollStart}ms)`)
               imap.end()
               imapPolling = false
             }
@@ -690,7 +712,7 @@ function pollImap() {
         })
 
         fetch.once('error', (err) => {
-          console.error('[IMAP] Fetch error:', err.message)
+          log('IMAP', `ERROR fetching: ${err.message}`)
           imap.end()
           imapPolling = false
         })
@@ -707,7 +729,7 @@ function pollImap() {
   })
 
   imap.once('error', (err) => {
-    console.error('[IMAP] Connection error:', err.message)
+    log('IMAP', `CONNECTION ERROR: ${err.message}`)
     imapPolling = false
   })
 
@@ -722,11 +744,11 @@ function pollImap() {
 function startImapPolling() {
   const config = reloadImapConfig()
   if (config.host && config.user && config.pass) {
-    console.log(`[IMAP] Starting polling every ${config.pollInterval}s for ${config.user}@${config.host}`)
+    log('IMAP', `Polling enabled: ${config.user}@${config.host}:${config.port} every ${config.pollInterval}s, mailbox: ${config.mailbox}`)
     // Initial poll after 5 seconds
     setTimeout(pollImap, 5000)
   } else {
-    console.log('[IMAP] Not configured - polling disabled. Configure in admin settings.')
+    log('IMAP', 'Not configured - polling disabled. Configure in admin settings.')
   }
 
   // Poll on interval (re-reads config each time, so changes are picked up)
