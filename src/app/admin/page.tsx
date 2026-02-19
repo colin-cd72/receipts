@@ -18,7 +18,6 @@ import {
   Search,
   Grid,
   List,
-  Archive,
   Cloud,
   AlertTriangle,
   Mail,
@@ -401,13 +400,6 @@ export default function AdminPage() {
             >
               <Download className="w-4 h-4" />
               Workday Export
-            </a>
-            <a
-              href="/api/export/zip"
-              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
-            >
-              <Archive className="w-4 h-4" />
-              Download ZIP
             </a>
             <button
               onClick={handleSyncDropbox}

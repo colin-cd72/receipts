@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3'
 import path from 'path'
+import crypto from 'crypto'
 
 const dbPath = path.join(process.cwd(), 'data', 'receipts.db')
 const db = new Database(dbPath)
@@ -46,6 +47,17 @@ db.exec(`
     processed_at DATETIME,
     edit_token TEXT,
     fix_email_sent INTEGER DEFAULT 0
+  )
+`)
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    password TEXT NOT NULL,
+    active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )
 `)
 
@@ -323,6 +335,70 @@ export function isAllowedSender(email: string): boolean {
   if (count === 0) return false
   const check = db.prepare('SELECT 1 FROM allowed_senders WHERE email = ?')
   return !!check.get(email.toLowerCase().trim())
+}
+
+// User types and CRUD
+
+export interface User {
+  id: number
+  email: string
+  name: string
+  password: string
+  active: number
+  created_at: string
+}
+
+export function hashPassword(plain: string): string {
+  const salt = crypto.randomBytes(16).toString('hex')
+  const hash = crypto.pbkdf2Sync(plain, salt, 100000, 64, 'sha512').toString('hex')
+  return `${salt}:${hash}`
+}
+
+export function verifyPassword(plain: string, stored: string): boolean {
+  const [salt, hash] = stored.split(':')
+  const verify = crypto.pbkdf2Sync(plain, salt, 100000, 64, 'sha512').toString('hex')
+  return hash === verify
+}
+
+export function insertUser(email: string, name: string, password: string): number {
+  const hashed = hashPassword(password)
+  const stmt = db.prepare('INSERT INTO users (email, name, password) VALUES (?, ?, ?)')
+  const result = stmt.run(email.toLowerCase().trim(), name.trim(), hashed)
+  return result.lastInsertRowid as number
+}
+
+export function updateUser(id: number, fields: { name?: string; active?: number; password?: string }): void {
+  const updates: string[] = []
+  const values: (string | number)[] = []
+  if (fields.name !== undefined) { updates.push('name = ?'); values.push(fields.name.trim()) }
+  if (fields.active !== undefined) { updates.push('active = ?'); values.push(fields.active) }
+  if (fields.password !== undefined) { updates.push('password = ?'); values.push(hashPassword(fields.password)) }
+  if (updates.length === 0) return
+  values.push(id)
+  const stmt = db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`)
+  stmt.run(...values)
+}
+
+export function deleteUser(id: number): void {
+  const stmt = db.prepare('DELETE FROM users WHERE id = ?')
+  stmt.run(id)
+}
+
+export function getUserByEmail(email: string): User | undefined {
+  const stmt = db.prepare('SELECT * FROM users WHERE email = ?')
+  return stmt.get(email.toLowerCase().trim()) as User | undefined
+}
+
+export function getAllUsers(): User[] {
+  const stmt = db.prepare('SELECT id, email, name, active, created_at FROM users ORDER BY created_at DESC')
+  return stmt.all() as User[]
+}
+
+export function authenticateUser(email: string, password: string): User | null {
+  const user = getUserByEmail(email)
+  if (!user || !user.active) return null
+  if (!verifyPassword(password, user.password)) return null
+  return user
 }
 
 export default db

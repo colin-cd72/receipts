@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Settings, Key, CheckCircle, AlertCircle, Loader2, ArrowLeft, Mail, Cloud, Inbox } from 'lucide-react'
+import { Settings, Key, CheckCircle, AlertCircle, Loader2, ArrowLeft, Mail, Cloud, Inbox, Users, Trash2, ToggleLeft, ToggleRight, Plus } from 'lucide-react'
 import Link from 'next/link'
 
 export default function SettingsPage() {
@@ -29,7 +29,18 @@ export default function SettingsPage() {
   const [testing, setTesting] = useState(false)
   const [testingEmail, setTestingEmail] = useState(false)
   const [testingImap, setTestingImap] = useState(false)
+  const [imapLogs, setImapLogs] = useState<string[] | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  // User management state
+  interface UserRecord { id: number; email: string; name: string; active: number; created_at: string }
+  const [users, setUsers] = useState<UserRecord[]>([])
+  const [newUserEmail, setNewUserEmail] = useState('')
+  const [newUserName, setNewUserName] = useState('')
+  const [newUserPassword, setNewUserPassword] = useState('')
+  const [addingUser, setAddingUser] = useState(false)
+  const [editPasswordId, setEditPasswordId] = useState<number | null>(null)
+  const [editPasswordValue, setEditPasswordValue] = useState('')
 
   useEffect(() => {
     const auth = sessionStorage.getItem('admin_auth')
@@ -58,6 +69,16 @@ export default function SettingsPage() {
     }
   }
 
+  const loadUsers = async () => {
+    try {
+      const res = await fetch('/api/admin/users')
+      const data = await res.json()
+      setUsers(data.users || [])
+    } catch (error) {
+      console.error('Failed to load users:', error)
+    }
+  }
+
   const loadSettings = async () => {
     setLoading(true)
     try {
@@ -83,6 +104,7 @@ export default function SettingsPage() {
       console.error('Failed to load settings:', error)
     }
     setLoading(false)
+    loadUsers()
   }
 
   const saveSettings = async (e: React.FormEvent) => {
@@ -189,6 +211,7 @@ export default function SettingsPage() {
   const testImap = async () => {
     setTestingImap(true)
     setMessage(null)
+    setImapLogs(null)
 
     try {
       const res = await fetch('/api/admin/settings/test-imap', {
@@ -204,6 +227,7 @@ export default function SettingsPage() {
       })
 
       const data = await res.json()
+      if (data.logs) setImapLogs(data.logs)
 
       if (res.ok) {
         setMessage({
@@ -218,6 +242,73 @@ export default function SettingsPage() {
     }
 
     setTestingImap(false)
+  }
+
+  const handleAddUser = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setAddingUser(true)
+    setMessage(null)
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: newUserEmail, name: newUserName, password: newUserPassword }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setNewUserEmail('')
+        setNewUserName('')
+        setNewUserPassword('')
+        setMessage({ type: 'success', text: 'User created successfully' })
+        loadUsers()
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Failed to create user' })
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to create user' })
+    }
+    setAddingUser(false)
+  }
+
+  const handleToggleUser = async (id: number, currentlyActive: number) => {
+    try {
+      await fetch(`/api/admin/users/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: !currentlyActive }),
+      })
+      loadUsers()
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to update user' })
+    }
+  }
+
+  const handleDeleteUser = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this user?')) return
+    try {
+      await fetch(`/api/admin/users/${id}`, { method: 'DELETE' })
+      loadUsers()
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to delete user' })
+    }
+  }
+
+  const handleUpdatePassword = async (id: number) => {
+    if (!editPasswordValue.trim()) return
+    try {
+      const res = await fetch(`/api/admin/users/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: editPasswordValue }),
+      })
+      if (res.ok) {
+        setEditPasswordId(null)
+        setEditPasswordValue('')
+        setMessage({ type: 'success', text: 'Password updated' })
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to update password' })
+    }
   }
 
   if (!authenticated) {
@@ -594,7 +685,153 @@ export default function SettingsPage() {
                     Restart the SMTP process after changing IMAP settings (<code className="bg-blue-100 px-1 rounded">pm2 restart receipts-smtp</code>).
                   </p>
                 </div>
+                {imapLogs && imapLogs.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-1">Connection Log</p>
+                    <pre className="p-3 bg-gray-900 text-green-400 rounded-lg text-xs overflow-auto max-h-48 font-mono">
+                      {imapLogs.map((line, i) => (
+                        <div key={i}>{line}</div>
+                      ))}
+                    </pre>
+                  </div>
+                )}
               </div>
+            </div>
+
+            {/* User Management Section */}
+            <div className="bg-white rounded-xl border p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Users className="w-5 h-5 text-gray-600" />
+                <h2 className="text-lg font-semibold">User Management</h2>
+              </div>
+              <p className="text-sm text-gray-500 mb-4">
+                Create user accounts for read-only access to processed receipts at <code className="bg-gray-100 px-1 rounded">/user</code>.
+              </p>
+
+              {/* Add User Form */}
+              <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+                  <Plus className="w-4 h-4" />
+                  Add User
+                </h3>
+                <div className="grid grid-cols-3 gap-3">
+                  <input
+                    type="text"
+                    value={newUserName}
+                    onChange={(e) => setNewUserName(e.target.value)}
+                    placeholder="Name"
+                    className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                  />
+                  <input
+                    type="email"
+                    value={newUserEmail}
+                    onChange={(e) => setNewUserEmail(e.target.value)}
+                    placeholder="Email"
+                    className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                  />
+                  <input
+                    type="password"
+                    value={newUserPassword}
+                    onChange={(e) => setNewUserPassword(e.target.value)}
+                    placeholder="Password"
+                    className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddUser}
+                  disabled={addingUser || !newUserName.trim() || !newUserEmail.trim() || !newUserPassword.trim()}
+                  className="mt-3 flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 text-sm"
+                >
+                  {addingUser ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  Add User
+                </button>
+              </div>
+
+              {/* Users Table */}
+              {users.length > 0 ? (
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b">
+                      <tr>
+                        <th className="text-left px-4 py-2 text-xs font-medium text-gray-500">Name</th>
+                        <th className="text-left px-4 py-2 text-xs font-medium text-gray-500">Email</th>
+                        <th className="text-left px-4 py-2 text-xs font-medium text-gray-500">Active</th>
+                        <th className="text-left px-4 py-2 text-xs font-medium text-gray-500">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {users.map((user) => (
+                        <tr key={user.id} className="border-b last:border-0">
+                          <td className="px-4 py-2 text-sm">{user.name}</td>
+                          <td className="px-4 py-2 text-sm text-gray-600">{user.email}</td>
+                          <td className="px-4 py-2">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleUser(user.id, user.active)}
+                              className="text-gray-600 hover:text-gray-900"
+                              title={user.active ? 'Deactivate' : 'Activate'}
+                            >
+                              {user.active ? (
+                                <ToggleRight className="w-6 h-6 text-green-500" />
+                              ) : (
+                                <ToggleLeft className="w-6 h-6 text-gray-400" />
+                              )}
+                            </button>
+                          </td>
+                          <td className="px-4 py-2">
+                            <div className="flex items-center gap-2">
+                              {editPasswordId === user.id ? (
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="password"
+                                    value={editPasswordValue}
+                                    onChange={(e) => setEditPasswordValue(e.target.value)}
+                                    placeholder="New password"
+                                    className="px-2 py-1 border rounded text-sm w-32"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdatePassword(user.id)}
+                                    className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => { setEditPasswordId(null); setEditPasswordValue('') }}
+                                    className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => { setEditPasswordId(user.id); setEditPasswordValue('') }}
+                                  className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"
+                                >
+                                  <Key className="w-3 h-3 inline mr-1" />
+                                  Password
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteUser(user.id)}
+                                className="p-1 text-red-500 hover:bg-red-50 rounded"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400 text-center py-4">No users created yet</p>
+              )}
             </div>
 
             {/* Message */}
